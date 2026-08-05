@@ -17,7 +17,7 @@ import { TOOLS, TOOLS_BY_NAME, runTool } from "./mcp-tools.js";
 
 // KEEP IN SYNC WITH package.json "version". Wire-visible via initialize serverInfo;
 // tests/server-info-version.test.ts fails if these two disagree.
-const SERVER_INFO = { name: "prism", version: "0.1.2" };
+const SERVER_INFO = { name: "prism", version: "0.1.3" };
 const PROTOCOL_VERSION = "2025-06-18";
 
 function timingSafeEqual(a: string, b: string): boolean {
