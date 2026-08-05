@@ -1,3 +1,9 @@
+## v0.1.3
+
+fix(dist): re-publish under @skyphusion (packument repair attempt)
+
+Local publish of 0.1.3 after partial 0.1.2 state. Package name is `@skyphusion/prism-mcp`.
+
 ## v0.1.2
 
 fix(dist): publish as `@skyphusion/prism-mcp` (correct npm scope)
