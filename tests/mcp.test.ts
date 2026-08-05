@@ -80,7 +80,7 @@ describe("prism MCP transport", () => {
     );
     const body = (await res.json()) as { result: { serverInfo: { name: string; version: string } } };
     expect(body.result.serverInfo.name).toBe("prism");
-    expect(body.result.serverInfo.version).toBe("0.1.0");
+    expect(body.result.serverInfo.version).toBe("0.1.1");
   });
 
   it("a notification (no id) returns 202 with no body", async () => {
