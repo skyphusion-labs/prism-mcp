@@ -1,0 +1,92 @@
+name: deploy
+
+# TAG-GATED. Tag prism-mcp-v* that is already on main deploys the Worker.
+# The live wrangler config is the repo secret PRISM_MCP_WRANGLER (escrowed in
+# crew-secrets/swarm-secrets/prism-mcp-wrangler/). Worker secrets MCP_TOKEN and
+# PRISM_SESSION are NOT in that config; they are set once with wrangler secret put.
+
+on:
+  push:
+    tags: ["prism-mcp-v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  gate:
+    name: gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
+  deploy:
+    name: deploy
+    needs: gate
+    if: startsWith(github.ref, 'refs/tags/prism-mcp-v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - name: Assert the tag is on main
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::tag commit is not on origin/main; refusing deploy"
+            exit 1
+          fi
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Materialize the wrangler config
+        env:
+          WRANGLER_TOML: ${{ secrets.PRISM_MCP_WRANGLER }}
+        run: |
+          set -euo pipefail
+          umask 077
+          printf '%s' "$WRANGLER_TOML" > wrangler.ci.toml
+          grep -q 'prism-mcp.skyphusion.org' wrangler.ci.toml || {
+            echo "::error::wrangler config missing prism-mcp.skyphusion.org route"
+            exit 1
+          }
+          grep -q 'PRISM_URL' wrangler.ci.toml || {
+            echo "::error::wrangler config missing PRISM_URL"
+            exit 1
+          }
+          if grep -qE 'PLACEHOLDER|\$\{MCP_' wrangler.ci.toml; then
+            echo "::error::wrangler config still carries a template placeholder"
+            exit 1
+          fi
+      - name: Deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx wrangler deploy -c wrangler.ci.toml
+      - name: Smoke test readiness
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3 4 5 6; do
+            code=$(curl -s -o health.json -w '%{http_code}' --max-time 20 https://prism-mcp.skyphusion.org/health || echo 000)
+            echo "attempt $attempt: HTTP $code"
+            [ "$code" = "200" ] && { cat health.json; exit 0; }
+            sleep 10
+          done
+          echo "::error::health never returned 200 after deploy"
+          cat health.json || true
+          exit 1
