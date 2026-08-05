@@ -17,7 +17,7 @@ permissions:
 
 jobs:
   publish:
-    name: npm publish @skyphusion-labs/prism-mcp
+    name: npm publish @skyphusion/prism-mcp
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
