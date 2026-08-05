@@ -8,7 +8,7 @@
 #   npx wrangler secret put PRISM_SESSION -c wrangler.mcp.toml
 
 name = "prism-mcp"
-main = "node_modules/@skyphusion-labs/prism-mcp/dist/mcp.js"
+main = "node_modules/@skyphusion/prism-mcp/dist/mcp.js"
 compatibility_date = "2026-04-01"
 workers_dev = false
 

@@ -1,8 +1,16 @@
+## v0.1.2
+
+fix(dist): publish as `@skyphusion/prism-mcp` (correct npm scope)
+
+Estate convention is `@skyphusion/*` (create-prism, crew-bus, search-mcp, …).
+`@skyphusion-labs/prism-mcp` was wrong scope and 0.1.0/0.1.1 under labs were
+ghost or mis-scoped. Rename and re-release under `@skyphusion`.
+
 ## v0.1.1
 
 fix(dist): re-publish to npm (0.1.0 was a ghost / not installable)
 
-CI reported `@skyphusion-labs/prism-mcp@0.1.0` published with provenance, but
+CI reported `@skyphusion/prism-mcp@0.1.0` published with provenance, but
 the registry document 404s and re-publish is blocked as "already published".
 Bump PATCH and ship a real public release.
 

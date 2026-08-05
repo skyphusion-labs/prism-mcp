@@ -1,7 +1,7 @@
 # Prism MCP
 
 Drive [Prism](https://play.skyphusion.org) from an AI agent (Claude Code, Cursor, or any MCP client)
-instead of the browser. Implementation: **`@skyphusion-labs/prism-mcp`**.
+instead of the browser. Implementation: **`@skyphusion/prism-mcp`**.
 
 **License:** MIT for this door. Prism remains AGPL-3.0-only.
 

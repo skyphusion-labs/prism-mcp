@@ -4,7 +4,7 @@ Guidance for Claude Code (and the crew) working in this repo.
 
 ## What this is
 
-**`@skyphusion-labs/prism-mcp`:** MCP door for the Prism playground API. Stateless Streamable-HTTP
+**`@skyphusion/prism-mcp`:** MCP door for the Prism playground API. Stateless Streamable-HTTP
 Worker that proxies curated tools to a prism host (`PRISM_URL`). Implementation lives here; deploy
 config is wrangler + secrets only.
 

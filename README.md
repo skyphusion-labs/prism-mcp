@@ -1,4 +1,4 @@
-# @skyphusion-labs/prism-mcp
+# @skyphusion/prism-mcp
 
 **License:** MIT  
 **API:** [prism](https://github.com/skyphusion-labs/prism) (AGPL playground Worker)  
@@ -14,13 +14,13 @@ tools to a prism instance over HTTPS.
 ## Install
 
 ```bash
-npm install @skyphusion-labs/prism-mcp
+npm install @skyphusion/prism-mcp
 ```
 
 ## Deploy (Cloudflare Workers)
 
 ```toml
-main = "node_modules/@skyphusion-labs/prism-mcp/dist/mcp.js"
+main = "node_modules/@skyphusion/prism-mcp/dist/mcp.js"
 ```
 
 See [docs/mcp.md](docs/mcp.md) for secrets, session seeding, agent wiring, and the tool catalog.
@@ -38,9 +38,9 @@ Access-mode / Access-fronted self-hosts.
 
 | Import | Role |
 |--------|------|
-| `@skyphusion-labs/prism-mcp` | Default Worker export (`fetch` handler) |
-| `@skyphusion-labs/prism-mcp/mcp-env` | `McpEnv` bindings |
-| `@skyphusion-labs/prism-mcp/mcp-tools` | Tool catalog + `runTool` |
+| `@skyphusion/prism-mcp` | Default Worker export (`fetch` handler) |
+| `@skyphusion/prism-mcp/mcp-env` | `McpEnv` bindings |
+| `@skyphusion/prism-mcp/mcp-tools` | Tool catalog + `runTool` |
 
 ## License
 
