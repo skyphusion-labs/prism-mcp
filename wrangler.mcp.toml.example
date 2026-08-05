@@ -1,0 +1,20 @@
+# Prism MCP Worker -- copy to wrangler.mcp.toml and fill placeholders.
+# Never commit the rendered file (it may carry your host name; secrets stay out-of-band).
+#
+#   MCP_HOST="prism-mcp.example.com" MCP_PRISM_URL="https://play.skyphusion.org" \
+#     envsubst '$MCP_HOST $MCP_PRISM_URL' < wrangler.mcp.toml.example > wrangler.mcp.toml
+#   npx wrangler deploy -c wrangler.mcp.toml
+#   npx wrangler secret put MCP_TOKEN -c wrangler.mcp.toml
+#   npx wrangler secret put PRISM_SESSION -c wrangler.mcp.toml
+
+name = "prism-mcp"
+main = "node_modules/@skyphusion-labs/prism-mcp/dist/mcp.js"
+compatibility_date = "2026-04-01"
+workers_dev = false
+
+[vars]
+PRISM_URL = "${MCP_PRISM_URL}"
+
+[[routes]]
+pattern = "${MCP_HOST}"
+custom_domain = true

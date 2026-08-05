@@ -1,0 +1,8 @@
+Prism MCP is licensed under the MIT License. See LICENSE for the full text.
+
+Copyright (C) 2026 Conrad Rockenhaus / Skyphusion Labs
+
+This package is a client door for Prism (skyphusion-labs/prism, AGPL-3.0).
+Using this MCP against a network service does not change Prism's license;
+Prism remains AGPL. This repository's own source is MIT so agents and
+integrators can embed the door without AGPL obligations on the client code.
