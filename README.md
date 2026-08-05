@@ -45,3 +45,8 @@ Access-mode / Access-fronted self-hosts.
 ## License
 
 MIT (this package). Prism itself remains AGPL-3.0-only.
+
+## Hosted door
+
+First-party Worker: `https://prism-mcp.skyphusion.org` (tag-gated deploy on `prism-mcp-v*`).
+Self-host still supported via wrangler template.

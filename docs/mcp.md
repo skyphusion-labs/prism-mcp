@@ -98,3 +98,8 @@ Curated tools map 1:1 to prism routes (see prism `CLAUDE.md` Routes reference). 
 - Agent compromise exposes `MCP_TOKEN` only; rotate without touching the prism account.
 - Prism session compromise is the same as a stolen browser cookie; revoke via logout / delete sessions on prism.
 - Never put secrets in the git repo or agent config files that get committed.
+
+## Hosted door
+
+First-party Worker: `https://prism-mcp.skyphusion.org` (tag-gated deploy on `prism-mcp-v*`).
+Self-host still supported via wrangler template.

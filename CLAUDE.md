@@ -61,3 +61,8 @@ npm run build
 
 Conrad laptop commits: `Conrad Rockenhaus <conrad@skyphusion.org>`. Crew on dischord: member
 identity via `sudo -u <member>`. Conventional Commits; SemVer on the package.
+
+## Hosted door
+
+First-party Worker: `https://prism-mcp.skyphusion.org` (tag-gated deploy on `prism-mcp-v*`).
+Self-host still supported via wrangler template.
