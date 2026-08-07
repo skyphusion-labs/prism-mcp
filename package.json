@@ -1,6 +1,6 @@
 {
   "name": "@skyphusion/prism-mcp",
-  "version": "0.1.3",
+  "version": "1.0.0",
   "description": "Prism MCP: drive the Prism multimodal playground API from an agent. Works with play.skyphusion.org and self-hosted prism.",
   "license": "MIT",
   "type": "module",

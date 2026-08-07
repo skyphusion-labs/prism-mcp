@@ -81,6 +81,8 @@ Curated tools map 1:1 to prism routes (see prism `CLAUDE.md` Routes reference). 
 | `list_history` / `get_history` / `delete_history` | `/api/history` |
 | `list_conversations` / `get_conversation` / `delete_conversation` | `/api/conversations` |
 | `move_conversation_to_project` | `PATCH /api/conversations/:id/project` |
+| `compact_conversation` | `POST /api/conversations/:id/compact` |
+| `clear_conversation_compact` | `DELETE /api/conversations/:id/compact` |
 | `list_documents` / `get_document` / `upload_document` / `delete_document` | `/api/documents` |
 | `poll_import` | `GET /api/import/:id` |
 | `list_projects` … `import_discord` | `/api/projects` |
@@ -88,10 +90,13 @@ Curated tools map 1:1 to prism routes (see prism `CLAUDE.md` Routes reference). 
 | `get_artifact` | `GET /api/artifact/*` |
 | `prism_request` | any path |
 
-### Out of scope
+Full parity matrix: [PARITY.md](./PARITY.md).
 
-- **WebSocket STT** (`/api/stt/stream`): live mic; not an MCP tool in v0.1.
+### Out of scope (v1.0)
+
+- **WebSocket STT / live voice chat** (`/api/stt/stream`): duplex Flux mic; not MCP request/response. Approximate with batch STT `chat` + `tts`.
 - **Account delete**: use the SPA or `prism_request` deliberately.
+- **Control plane (play-proxy)**: this door is playground prism only; prefs may store a `pcp_` for hybrid use on the prism Worker.
 
 ## Security boundary
 

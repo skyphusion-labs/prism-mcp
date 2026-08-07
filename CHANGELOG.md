@@ -1,3 +1,25 @@
+## v1.0.0
+
+Agent HTTP parity release for Prism playground (play.skyphusion.org).
+
+### Added
+- **`compact_conversation` / `clear_conversation_compact`** -- POST/DELETE
+  `/api/conversations/:id/compact` (prism v0.175.7+), first-class tools.
+
+### Parity claim
+- **Curated tools cover every prism HTTP `/api/*` route** a human SPA uses for
+  chat, multimodal gen, history, RAG, projects, Discord import, jobs, artifacts,
+  prefs, and compact. Escape hatch: `prism_request`.
+- **Still not real-time voice:** WebSocket `/api/stt/stream` (Deepgram Flux live
+  mic + voice-chat loop) has no MCP equivalent. Agents approximate with
+  `chat` (stt model + audio attachment) → `chat` → `tts` / chat TTS models.
+- Auth session is operator-seeded (`PRISM_SESSION`); signup/login via
+  `prism_request` if needed. Account delete is deliberate SPA / escape-hatch only.
+
+### Hosted
+- Tag-gated deploy: `prism-mcp-v1.0.0` → `https://prism-mcp.skyphusion.org`
+
+
 ## v0.1.3
 
 fix(dist): re-publish under @skyphusion (packument repair attempt)

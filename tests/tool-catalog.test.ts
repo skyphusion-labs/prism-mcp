@@ -20,6 +20,8 @@ const REQUIRED_TOOLS = [
   "get_conversation",
   "delete_conversation",
   "move_conversation_to_project",
+  "compact_conversation",
+  "clear_conversation_compact",
   "list_documents",
   "get_document",
   "upload_document",

@@ -1,15 +1,33 @@
 # @skyphusion/prism-mcp
 
 **License:** MIT  
+**Version:** 1.0.0  
 **API:** [prism](https://github.com/skyphusion-labs/prism) (AGPL playground Worker)  
-**Control plane (metered chat):** [prism-control-plane](https://github.com/skyphusion-labs/prism-control-plane)
+**Control plane (metered commercial door):** [prism-control-plane](https://github.com/skyphusion-labs/prism-control-plane)
 
-Agent **MCP** for [Prism](https://play.skyphusion.org): full HTTP parity with the prism `/api/*`
+Agent **MCP** for [Prism](https://play.skyphusion.org): HTTP parity with the prism `/api/*`
 surface so coding agents can chat, generate images/video/music/TTS, manage RAG documents and
-projects, and poll long jobs -- without a browser.
+projects, compact long threads, and poll long jobs -- without a browser.
 
 Stateless [Model Context Protocol](https://modelcontextprotocol.io/) Worker that proxies curated
 tools to a prism instance over HTTPS.
+
+**Parity:** [docs/PARITY.md](docs/PARITY.md) -- full HTTP agent parity in 1.0.0; live Flux mic
+WebSocket is the only major human SPA gap.
+
+## Architecture
+
+```mermaid
+flowchart LR
+  Agent["MCP client / agent"]
+  MCP["prism-mcp Worker<br/>Bearer MCP_TOKEN"]
+  Prism["prism playground<br/>Cookie session"]
+  GW["AI Gateway + models"]
+
+  Agent -->|"tools/call"| MCP
+  MCP -->|"HTTPS + __Host-prism_session"| Prism
+  Prism --> GW
+```
 
 ## Install
 
@@ -33,6 +51,22 @@ See [docs/mcp.md](docs/mcp.md) for secrets, session seeding, agent wiring, and t
 
 Optional: `PRISM_ACCESS_EMAIL`, `PRISM_ACCESS_CLIENT_ID`, `PRISM_ACCESS_CLIENT_SECRET` for
 Access-mode / Access-fronted self-hosts.
+
+## Tools (1.0.0)
+
+| Area | Tools |
+|------|--------|
+| Health | `health`, `health_deep` |
+| Catalog / prefs | `list_models`, `get_prefs`, `update_prefs` |
+| Generation | `chat`, `chat_stream`, `tts` |
+| History | `list_history`, `get_history`, `delete_history` |
+| Conversations | `list/get/delete_conversation`, `move_conversation_to_project`, **`compact_conversation`**, **`clear_conversation_compact`** |
+| RAG | `list/get/upload/delete_document`, `poll_import` |
+| Projects | CRUD, attach/detach docs, `import_discord` |
+| Jobs / media | `poll_job`, `get_artifact` |
+| Escape | `prism_request` (any path) |
+
+**Not a tool:** WebSocket `/api/stt/stream` (live Flux). Approximate with STT chat + TTS.
 
 ## Package layout
 

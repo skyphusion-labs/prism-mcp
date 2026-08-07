@@ -312,6 +312,44 @@ export const TOOLS: McpTool[] = [
       };
     },
   },
+  {
+    name: "compact_conversation",
+    description:
+      "Summarize older turns for model context (POST /api/conversations/:id/compact, prism v0.175.7+). " +
+      "UI transcript stays full; next chat calls inject the summary + keep_recent raw turns. " +
+      "Optional body: model (summarizer), keep_recent (default 2).",
+    inputSchema: OBJ(
+      {
+        id: STR("conversation_id."),
+        model: STR("Optional chat model id for the summary turn."),
+        keep_recent: NUM("How many recent turns to keep raw (default 2)."),
+      },
+      ["id"],
+    ),
+    build: (a) => {
+      const id = reqStr(a, "id");
+      const body: Record<string, unknown> = {};
+      if (typeof a.model === "string" && a.model.trim()) body.model = a.model.trim();
+      const kr = optNum(a, "keep_recent");
+      if (kr !== undefined) body.keep_recent = kr;
+      return {
+        method: "POST",
+        path: `/api/conversations/${encodeURIComponent(id)}/compact`,
+        body: Object.keys(body).length ? body : {},
+      };
+    },
+  },
+  {
+    name: "clear_conversation_compact",
+    description:
+      "Clear compact summary so the next turn uses full history again " +
+      "(DELETE /api/conversations/:id/compact).",
+    inputSchema: OBJ({ id: STR("conversation_id.") }, ["id"]),
+    build: (a) => ({
+      method: "DELETE",
+      path: `/api/conversations/${encodeURIComponent(reqStr(a, "id"))}/compact`,
+    }),
+  },
 
   // --- documents / RAG -------------------------------------------------------
   {
