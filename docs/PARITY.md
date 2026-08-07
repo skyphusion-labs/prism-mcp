@@ -13,6 +13,28 @@ as completely as a human in the browser?
 
 **v1.0.0 claim:** full **HTTP agent parity** for the playground API. Not bit-identical UX to a human (no live duplex voice, no continuous SSE token stream).
 
+```mermaid
+flowchart TB
+  subgraph yes["Covered by MCP tools"]
+    H["HTTP /api/*"]
+    C["chat · image · video · TTS · STT batch · music"]
+    R["history · conversations · compact"]
+    G["RAG · projects · Discord · jobs · artifacts"]
+    H --> C
+    H --> R
+    H --> G
+  end
+
+  subgraph no["Not MCP-native"]
+    WS["WS /api/stt/stream<br/>Flux live mic"]
+    SSE["Continuous token UI<br/>agents get drained SSE"]
+    CP["Direct control-plane doors<br/>use pcp_ native clients"]
+  end
+
+  Agent["Agent via prism-mcp"] --> yes
+  Agent -.->|"gap"| no
+```
+
 ## Capability matrix
 
 | Human SPA capability | MCP tool | Notes |
@@ -37,6 +59,36 @@ as completely as a human in the browser?
 | **Live Flux mic / voice chat loop** | **none** | WS `/api/stt/stream` |
 | Continuous token streaming UI | n/a | Agents get drained SSE |
 
+### Map: SPA surface → tools
+
+```mermaid
+flowchart LR
+  subgraph spa["Human SPA"]
+    UI1["Model picker"]
+    UI2["Chat / multimodal"]
+    UI3["History sidebar"]
+    UI4["Projects + RAG"]
+    UI5["Mic · voice chat"]
+    UI6["Prefs"]
+  end
+
+  subgraph mcp["MCP tools"]
+    T1["list_models"]
+    T2["chat / chat_stream / tts"]
+    T3["list/get/delete_history<br/>conversations + compact"]
+    T4["documents · projects · poll_*"]
+    T5["batch STT via chat only"]
+    T6["get_prefs / update_prefs"]
+  end
+
+  UI1 --> T1
+  UI2 --> T2
+  UI3 --> T3
+  UI4 --> T4
+  UI5 -.->|"no duplex WS"| T5
+  UI6 --> T6
+```
+
 ### Voice workaround (agent)
 
 1. Capture audio offline → base64 attachment  
@@ -46,10 +98,36 @@ as completely as a human in the browser?
 
 Not hands-free duplex; good enough for batch voice pipelines.
 
+```mermaid
+sequenceDiagram
+  participant A as Agent
+  participant M as prism-mcp
+  participant P as prism
+
+  A->>M: chat (STT model + audio b64)
+  M->>P: POST /api/chat
+  P-->>A: transcript
+  A->>M: chat (chat model + transcript)
+  M->>P: POST /api/chat
+  P-->>A: reply text
+  A->>M: tts or chat TTS model
+  M->>P: POST /api/tts or /api/chat
+  P-->>A: audio artifact
+```
+
 ## Auth model (not human browser)
 
-```
-Agent --Bearer MCP_TOKEN--> prism-mcp --Cookie PRISM_SESSION--> prism
+```mermaid
+sequenceDiagram
+  participant A as Agent
+  participant M as prism-mcp
+  participant P as prism
+
+  Note over A,M: Agent never sees the cookie
+  A->>M: Bearer MCP_TOKEN
+  M->>P: Cookie PRISM_SESSION
+  P-->>M: response
+  M-->>A: tool result
 ```
 
 Human logs in via SPA; operator pastes `__Host-prism_session` into Worker secret.
@@ -62,6 +140,23 @@ Agent never sees the cookie. Compromised agent = rotate `MCP_TOKEN` only.
 | Live STT WebSocket | MCP is request/response; Flux is duplex WS | Optional companion Worker that owns a DO session and exposes `start_voice` / `send_audio_chunk` / `end_voice` tools; or agent-side WS outside MCP |
 | Control-plane doors | MCP is playground-scoped | Separate MCP for `play-proxy` (Bearer `pcp_`) if agents must drive commercial iOS surface |
 | Session minting | No MFA-free agent login in product | Keep operator seed; or add short-lived enroll tokens for agents |
+
+```mermaid
+flowchart TB
+  subgraph v10["v1.0.0 shipped"]
+    HTTP["Full HTTP /api/* tools"]
+    Compact["compact_conversation"]
+    Escape["prism_request"]
+  end
+
+  subgraph later["Optional later (not blocking 1.0)"]
+    Voice["DO-backed voice session tools"]
+    PlaneMCP["play-proxy MCP door"]
+    Enroll["agent session mint / enroll"]
+  end
+
+  v10 --> later
+```
 
 ## Tool count (v1.0.0)
 

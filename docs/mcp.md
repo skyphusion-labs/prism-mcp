@@ -3,7 +3,8 @@
 Drive [Prism](https://play.skyphusion.org) from an AI agent (Claude Code, Cursor, or any MCP client)
 instead of the browser. Implementation: **`@skyphusion/prism-mcp`**.
 
-**License:** MIT for this door. Prism remains AGPL-3.0-only.
+**License:** MIT for this door. Prism remains AGPL-3.0-only.  
+**Version:** 1.0.0 · **Hosted:** `https://prism-mcp.skyphusion.org`
 
 ## Why a separate Worker
 
@@ -11,8 +12,42 @@ instead of the browser. Implementation: **`@skyphusion/prism-mcp`**.
 - **No prism bindings.** Points at any prism URL over HTTPS.
 - **Stateless.** Long jobs: agent calls `poll_job` / `poll_import`.
 
+```mermaid
+flowchart LR
+  A["Agent"] -->|"Bearer MCP_TOKEN"| M["prism-mcp Worker"]
+  M -->|"Cookie __Host-prism_session"| P["prism<br/>PRISM_URL"]
+  P --> G["AI Gateway + models"]
 ```
-Agent --Bearer MCP_TOKEN--> prism-mcp --Cookie __Host-prism_session--> prism (PRISM_URL)
+
+## Architecture (detail)
+
+```mermaid
+flowchart TB
+  subgraph client["MCP client"]
+    IDE["Claude Code / Cursor / custom"]
+  end
+
+  subgraph worker["prism-mcp"]
+    direction TB
+    H["GET /health"]
+    MCP["POST /mcp<br/>JSON-RPC tools/*"]
+    AuthZ["check MCP_TOKEN"]
+    RT["runTool → prism fetch"]
+    MCP --> AuthZ --> RT
+  end
+
+  subgraph prism["prism playground"]
+    Sess["session cookie auth"]
+    Routes["/api/chat · history · conversations<br/>documents · projects · jobs · prefs"]
+    Compact["POST/DELETE …/compact"]
+    Flux["WS /api/stt/stream"]
+  end
+
+  IDE --> H
+  IDE --> MCP
+  RT --> Sess --> Routes
+  Routes --> Compact
+  Flux -.->|"out of MCP scope"| client
 ```
 
 ## Before you start
@@ -26,6 +61,24 @@ Agent --Bearer MCP_TOKEN--> prism-mcp --Cookie __Host-prism_session--> prism (PR
 3. Configure that account's gateway / `pcp_` key under Account prefs if you want inference to work
    (same as a human user on play).
 4. A custom domain for the MCP Worker (example: `prism-mcp.example.com`).
+
+### Session seed flow
+
+```mermaid
+sequenceDiagram
+  participant Op as Operator
+  participant SPA as prism SPA
+  participant W as wrangler secrets
+  participant M as prism-mcp
+  participant A as Agent
+
+  Op->>SPA: login / signup
+  SPA-->>Op: Set-Cookie __Host-prism_session
+  Op->>W: secret put PRISM_SESSION
+  Op->>W: secret put MCP_TOKEN
+  A->>M: Bearer MCP_TOKEN
+  M->>SPA: Cookie session (as Op's user)
+```
 
 ## Deploy
 
@@ -62,8 +115,16 @@ curl -s https://prism-mcp.example.com/mcp \
 
 ## Connect an agent
 
-MCP Streamable HTTP: `POST https://prism-mcp.example.com/mcp` with
-`Authorization: Bearer <MCP_TOKEN>`.
+MCP Streamable HTTP: `POST https://prism-mcp.example.com/mcp` (or hosted
+`https://prism-mcp.skyphusion.org/mcp`) with `Authorization: Bearer <MCP_TOKEN>`.
+
+```mermaid
+flowchart LR
+  CFG["Agent MCP config<br/>url + Bearer"] --> POST["POST /mcp"]
+  POST --> LIST["tools/list"]
+  POST --> CALL["tools/call name + args"]
+  CALL --> OUT["text / JSON result"]
+```
 
 ## Tool reference
 
@@ -85,12 +146,53 @@ Curated tools map 1:1 to prism routes (see prism `CLAUDE.md` Routes reference). 
 | `clear_conversation_compact` | `DELETE /api/conversations/:id/compact` |
 | `list_documents` / `get_document` / `upload_document` / `delete_document` | `/api/documents` |
 | `poll_import` | `GET /api/import/:id` |
-| `list_projects` … `import_discord` | `/api/projects` |
+| `list_projects` / `get_project` / `create_project` / `update_project` / `delete_project` | `/api/projects` |
+| `add_project_document` / `remove_project_document` | project doc attach |
+| `import_discord` | Discord ingest on a project |
 | `poll_job` | `GET /api/job/:id` |
 | `get_artifact` | `GET /api/artifact/*` |
 | `prism_request` | any path |
 
 Full parity matrix: [PARITY.md](./PARITY.md).
+
+### Tool groups (mental model)
+
+```mermaid
+mindmap
+  root((prism-mcp tools))
+    Health
+      health
+      health_deep
+    Catalog
+      list_models
+      get_prefs
+      update_prefs
+    Generate
+      chat
+      chat_stream
+      tts
+    History
+      list_history
+      get_history
+      delete_history
+    Conversations
+      list_get_delete
+      move_to_project
+      compact
+      clear_compact
+    RAG
+      documents
+      poll_import
+    Projects
+      CRUD
+      attach_docs
+      import_discord
+    Jobs
+      poll_job
+      get_artifact
+    Escape
+      prism_request
+```
 
 ### Out of scope (v1.0)
 
@@ -99,6 +201,21 @@ Full parity matrix: [PARITY.md](./PARITY.md).
 - **Control plane (play-proxy)**: this door is playground prism only; prefs may store a `pcp_` for hybrid use on the prism Worker.
 
 ## Security boundary
+
+```mermaid
+flowchart TB
+  subgraph exposed["If agent is compromised"]
+    T["MCP_TOKEN only"]
+  end
+
+  subgraph protected["Stays on Worker"]
+    S["PRISM_SESSION cookie"]
+    Acc["optional Access service token"]
+  end
+
+  T -->|"rotate without touching prism account"| R["re-put MCP_TOKEN"]
+  S -->|"same blast as stolen browser cookie"| L["logout / delete sessions on prism"]
+```
 
 - Agent compromise exposes `MCP_TOKEN` only; rotate without touching the prism account.
 - Prism session compromise is the same as a stolen browser cookie; revoke via logout / delete sessions on prism.

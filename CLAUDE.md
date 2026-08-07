@@ -49,6 +49,15 @@ npm run build
 - **One tool, one route** (+ `prism_request` escape hatch). Live WebSocket STT
   (`/api/stt/stream`) is out of scope for MCP tools.
 
+```mermaid
+flowchart LR
+  Agent -->|"Bearer MCP_TOKEN"| MCP["prism-mcp"]
+  MCP -->|"Cookie session"| Prism["prism PRISM_URL"]
+  Prism --> GW["AI Gateway"]
+```
+
+Public docs with full diagrams: `README.md`, `docs/mcp.md`, `docs/PARITY.md`.
+
 ## Hard rules
 
 - Typecheck is the CI gate. Run before push.
