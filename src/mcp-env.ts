@@ -38,7 +38,12 @@ export interface McpEnv {
   /**
    * MCP gate. Every /mcp request must present `Authorization: Bearer <MCP_TOKEN>`.
    * Worker SECRET. Distinct from the prism session so the agent never learns
-   * the user's prism cookie, and the two rotate independently. Unset => fail closed.
+   * the user's prism cookie in normal use, and the two rotate independently.
+   * Unset => fail closed. Caveat: `prism_request` is a generic escape hatch
+   * that relays whatever body the target prism path returns, unfiltered; a
+   * prism route that reflects session material into a response body would
+   * still reach the agent through that path (see docs/mcp.md "Security
+   * boundary"). This server does not filter prism_request output.
    */
   MCP_TOKEN?: string;
 }

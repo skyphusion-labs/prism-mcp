@@ -23,10 +23,28 @@ export type McpContent =
   | { type: "text"; text: string }
   | { type: "image"; data: string; mimeType: string };
 
+/**
+ * MCP 2025-06-18 client-facing hints (spec: ToolAnnotations) so an approval
+ * policy can auto-approve reads and gate writes without a human clicking
+ * through every one of the 33 tools. These are HINTS from the server, not a
+ * security boundary the client can rely on for anything the server itself
+ * does not otherwise enforce -- but this server does not expose a tool it
+ * marks destructiveHint:false that can destroy prism-side data.
+ */
+export interface McpToolAnnotations {
+  /** True: the tool only reads state and never modifies prism data. */
+  readOnlyHint?: boolean;
+  /** True: the tool can irreversibly destroy or discard data. Meaningful only when readOnlyHint is false. */
+  destructiveHint?: boolean;
+  /** True: repeating an identical call has no additional effect beyond the first. Meaningful only when readOnlyHint is false. */
+  idempotentHint?: boolean;
+}
+
 export interface McpTool {
   name: string;
   description: string;
   inputSchema: Record<string, unknown>;
+  annotations?: McpToolAnnotations;
   /** Return image bytes as MCP image blocks when prism streams an image/* body. */
   inlineImages?: boolean;
   /** Drain text/event-stream into a single text result (chat_stream). */
@@ -42,6 +60,13 @@ const OBJ = (
 const STR = (description: string) => ({ type: "string", description });
 const NUM = (description: string) => ({ type: "number", description });
 const BOOL = (description: string) => ({ type: "boolean", description });
+
+/** Every GET tool in this catalog: no side effects on prism state. */
+const READ_ONLY: McpToolAnnotations = Object.freeze({
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+});
 
 function reqStr(args: Record<string, unknown>, key: string): string {
   const v = args[key];
@@ -103,6 +128,7 @@ export const TOOLS: McpTool[] = [
     name: "health",
     description: "Prism liveness probe (GET /health). No auth required on prism.",
     inputSchema: OBJ({}),
+    annotations: READ_ONLY,
     build: () => ({ method: "GET", path: "/health" }),
   },
   {
@@ -110,6 +136,7 @@ export const TOOLS: McpTool[] = [
     description:
       "Prism deep health (GET /health/deep): D1, R2, Vectorize, gateway config. May return 503.",
     inputSchema: OBJ({}),
+    annotations: READ_ONLY,
     build: () => ({ method: "GET", path: "/health/deep" }),
   },
 
@@ -120,6 +147,7 @@ export const TOOLS: McpTool[] = [
       "List prism catalog models (GET /api/models). Returns models, auth mode, gateway/control-plane status. " +
       "Boot probe is public on prism; still sent with session when configured.",
     inputSchema: OBJ({}),
+    annotations: READ_ONLY,
     build: () => ({ method: "GET", path: "/api/models" }),
   },
   {
@@ -127,6 +155,7 @@ export const TOOLS: McpTool[] = [
     description:
       "Get the session user's AI Gateway / control-plane prefs (GET /api/prefs). Tokens are masked.",
     inputSchema: OBJ({}),
+    annotations: READ_ONLY,
     build: () => ({ method: "GET", path: "/api/prefs" }),
   },
   {
@@ -141,6 +170,9 @@ export const TOOLS: McpTool[] = [
       control_plane_key: STR("prism-control-plane client key (pcp_<16 hex>_<43 base64url>)."),
       clear_control_plane_key: BOOL("When true, clear the control-plane key."),
     }),
+    // Destructive: clear_cf_aig_token / clear_control_plane_key irreversibly
+    // discard a stored credential (there is no undo short of re-entering it).
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
     build: (a) => ({ method: "PATCH", path: "/api/prefs", body: a }),
   },
 
@@ -171,10 +203,11 @@ export const TOOLS: McpTool[] = [
       },
       ["model", "user_input"],
     ),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
     build: (a) => {
-      reqStr(a, "model");
-      reqStr(a, "user_input");
-      return { method: "POST", path: "/api/chat", body: a };
+      const model = reqStr(a, "model");
+      const user_input = reqStr(a, "user_input");
+      return { method: "POST", path: "/api/chat", body: { ...a, model, user_input } };
     },
   },
   {
@@ -196,10 +229,11 @@ export const TOOLS: McpTool[] = [
       ["model", "user_input"],
     ),
     collectSse: true,
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
     build: (a) => {
-      reqStr(a, "model");
-      reqStr(a, "user_input");
-      return { method: "POST", path: "/api/chat/stream", body: a };
+      const model = reqStr(a, "model");
+      const user_input = reqStr(a, "user_input");
+      return { method: "POST", path: "/api/chat/stream", body: { ...a, model, user_input } };
     },
   },
   {
@@ -215,6 +249,9 @@ export const TOOLS: McpTool[] = [
       },
       ["model"],
     ),
+    // No history row and no persisted state, so a repeat is a fresh independent
+    // synthesis rather than an accumulating write -- but it is not read-only.
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
     build: (a) => {
       const text =
         typeof a.text === "string" && a.text.trim()
@@ -239,6 +276,7 @@ export const TOOLS: McpTool[] = [
       limit: NUM("Optional page size if prism supports it (forwarded as query)."),
       offset: NUM("Optional offset."),
     }),
+    annotations: READ_ONLY,
     build: (a) => ({
       method: "GET",
       path: "/api/history",
@@ -249,12 +287,14 @@ export const TOOLS: McpTool[] = [
     name: "get_history",
     description: "One history row with attachments + output (GET /api/history/:id).",
     inputSchema: OBJ({ id: NUM("History row id.") }, ["id"]),
+    annotations: READ_ONLY,
     build: (a) => ({ method: "GET", path: `/api/history/${reqNum(a, "id")}` }),
   },
   {
     name: "delete_history",
     description: "Delete a history row and its R2 objects (DELETE /api/history/:id).",
     inputSchema: OBJ({ id: NUM("History row id.") }, ["id"]),
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
     build: (a) => ({ method: "DELETE", path: `/api/history/${reqNum(a, "id")}` }),
   },
 
@@ -263,12 +303,14 @@ export const TOOLS: McpTool[] = [
     name: "list_conversations",
     description: "List conversations grouped by conversation_id (GET /api/conversations).",
     inputSchema: OBJ({}),
+    annotations: READ_ONLY,
     build: () => ({ method: "GET", path: "/api/conversations" }),
   },
   {
     name: "get_conversation",
     description: "Full transcript for a conversation (GET /api/conversations/:id).",
     inputSchema: OBJ({ id: STR("conversation_id.") }, ["id"]),
+    annotations: READ_ONLY,
     build: (a) => ({
       method: "GET",
       path: `/api/conversations/${encodeURIComponent(reqStr(a, "id"))}`,
@@ -278,6 +320,7 @@ export const TOOLS: McpTool[] = [
     name: "delete_conversation",
     description: "Cascade-delete a conversation's turns + R2 artifacts (DELETE /api/conversations/:id).",
     inputSchema: OBJ({ id: STR("conversation_id.") }, ["id"]),
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
     build: (a) => ({
       method: "DELETE",
       path: `/api/conversations/${encodeURIComponent(reqStr(a, "id"))}`,
@@ -298,6 +341,9 @@ export const TOOLS: McpTool[] = [
       },
       ["id", "project_id"],
     ),
+    // Reversible (move again, or back to null) and re-applying the same
+    // target project_id lands on the same state.
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
     build: (a) => {
       const id = reqStr(a, "id");
       if (!("project_id" in a)) throw new Error("missing required argument 'project_id'");
@@ -326,6 +372,9 @@ export const TOOLS: McpTool[] = [
       },
       ["id"],
     ),
+    // Not destructive (the UI transcript stays full), but a model-generated
+    // summary can differ call to call, so not claimed idempotent.
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
     build: (a) => {
       const id = reqStr(a, "id");
       const body: Record<string, unknown> = {};
@@ -345,6 +394,9 @@ export const TOOLS: McpTool[] = [
       "Clear compact summary so the next turn uses full history again " +
       "(DELETE /api/conversations/:id/compact).",
     inputSchema: OBJ({ id: STR("conversation_id.") }, ["id"]),
+    // Clears a derived cache, not primary data (compact_conversation can
+    // regenerate it); repeating the clear lands on the same cleared state.
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
     build: (a) => ({
       method: "DELETE",
       path: `/api/conversations/${encodeURIComponent(reqStr(a, "id"))}/compact`,
@@ -356,6 +408,7 @@ export const TOOLS: McpTool[] = [
     name: "list_documents",
     description: "List RAG documents (GET /api/documents). Optional ?project_id=N filter.",
     inputSchema: OBJ({ project_id: NUM("Only docs attached to this project.") }),
+    annotations: READ_ONLY,
     build: (a) => ({
       method: "GET",
       path: "/api/documents",
@@ -366,6 +419,7 @@ export const TOOLS: McpTool[] = [
     name: "get_document",
     description: "Document metadata + chunk preview (GET /api/documents/:id).",
     inputSchema: OBJ({ id: NUM("Document id.") }, ["id"]),
+    annotations: READ_ONLY,
     build: (a) => ({ method: "GET", path: `/api/documents/${reqNum(a, "id")}` }),
   },
   {
@@ -381,6 +435,7 @@ export const TOOLS: McpTool[] = [
       },
       ["data"],
     ),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
     build: (a) => ({
       method: "POST",
       path: "/api/documents",
@@ -395,12 +450,14 @@ export const TOOLS: McpTool[] = [
     name: "delete_document",
     description: "Cascade-delete document, chunks, vectors, R2 (DELETE /api/documents/:id).",
     inputSchema: OBJ({ id: NUM("Document id.") }, ["id"]),
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
     build: (a) => ({ method: "DELETE", path: `/api/documents/${reqNum(a, "id")}` }),
   },
   {
     name: "poll_import",
     description: "Poll a durable zip RAG import workflow (GET /api/import/:id).",
     inputSchema: OBJ({ id: STR("Import workflow instance id.") }, ["id"]),
+    annotations: READ_ONLY,
     build: (a) => ({
       method: "GET",
       path: `/api/import/${encodeURIComponent(reqStr(a, "id"))}`,
@@ -412,12 +469,14 @@ export const TOOLS: McpTool[] = [
     name: "list_projects",
     description: "List projects with document counts (GET /api/projects).",
     inputSchema: OBJ({}),
+    annotations: READ_ONLY,
     build: () => ({ method: "GET", path: "/api/projects" }),
   },
   {
     name: "get_project",
     description: "Get one project + members/docs (GET /api/projects/:id).",
     inputSchema: OBJ({ id: NUM("Project id.") }, ["id"]),
+    annotations: READ_ONLY,
     build: (a) => ({ method: "GET", path: `/api/projects/${reqNum(a, "id")}` }),
   },
   {
@@ -431,7 +490,11 @@ export const TOOLS: McpTool[] = [
       },
       ["name"],
     ),
-    build: (a) => ({ method: "POST", path: "/api/projects", body: a }),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
+    build: (a) => {
+      reqStr(a, "name");
+      return { method: "POST", path: "/api/projects", body: a };
+    },
   },
   {
     name: "update_project",
@@ -445,6 +508,9 @@ export const TOOLS: McpTool[] = [
       },
       ["id"],
     ),
+    // Overwrites metadata fields (not a delete); re-applying the same body
+    // lands on the same state.
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
     build: (a) => ({
       method: "PATCH",
       path: `/api/projects/${reqNum(a, "id")}`,
@@ -455,6 +521,7 @@ export const TOOLS: McpTool[] = [
     name: "delete_project",
     description: "Delete a project (docs are kept) (DELETE /api/projects/:id).",
     inputSchema: OBJ({ id: NUM("Project id.") }, ["id"]),
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
     build: (a) => ({ method: "DELETE", path: `/api/projects/${reqNum(a, "id")}` }),
   },
   {
@@ -464,6 +531,8 @@ export const TOOLS: McpTool[] = [
       { project_id: NUM("Project id."), document_id: NUM("Document id.") },
       ["project_id", "document_id"],
     ),
+    // Reversible via remove_project_document; attaching twice is the same state.
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
     build: (a) => ({
       method: "POST",
       path: `/api/projects/${reqNum(a, "project_id")}/documents/${reqNum(a, "document_id")}`,
@@ -476,6 +545,9 @@ export const TOOLS: McpTool[] = [
       { project_id: NUM("Project id."), document_id: NUM("Document id.") },
       ["project_id", "document_id"],
     ),
+    // The document itself is kept (per description); detaching is reversible
+    // via add_project_document, so this is not treated as destructive.
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
     build: (a) => ({
       method: "DELETE",
       path: `/api/projects/${reqNum(a, "project_id")}/documents/${reqNum(a, "document_id")}`,
@@ -496,11 +568,18 @@ export const TOOLS: McpTool[] = [
       },
       ["project_id", "body"],
     ),
-    build: (a) => ({
-      method: "POST",
-      path: `/api/projects/${reqNum(a, "project_id")}/import-discord`,
-      body: parseBodyArg(a.body),
-    }),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
+    build: (a) => {
+      const project_id = reqNum(a, "project_id");
+      if (a.body === undefined || a.body === null) {
+        throw new Error("missing required argument 'body'");
+      }
+      return {
+        method: "POST",
+        path: `/api/projects/${project_id}/import-discord`,
+        body: parseBodyArg(a.body),
+      };
+    },
   },
 
   // --- jobs / artifacts ------------------------------------------------------
@@ -508,6 +587,7 @@ export const TOOLS: McpTool[] = [
     name: "poll_job",
     description: "Poll an async video/music job (GET /api/job/:id). Reads the chats row status.",
     inputSchema: OBJ({ id: NUM("Job / chat row id.") }, ["id"]),
+    annotations: READ_ONLY,
     build: (a) => ({ method: "GET", path: `/api/job/${reqNum(a, "id")}` }),
   },
   {
@@ -517,6 +597,7 @@ export const TOOLS: McpTool[] = [
       "Images may return as MCP image blocks; other binary is summarized. key is the R2 key path without leading slash.",
     inputSchema: OBJ({ key: STR("R2 key, e.g. 'outputs/usr_…/img.png'.") }, ["key"]),
     inlineImages: true,
+    annotations: READ_ONLY,
     build: (a) => ({
       method: "GET",
       path: `/api/artifact/${artifactKeyPath(reqStr(a, "key"))}`,
@@ -546,6 +627,14 @@ export const TOOLS: McpTool[] = [
       },
       ["method", "path"],
     ),
+    // The method/path are runtime arguments, so this tool CAN issue a DELETE
+    // (or any other write) to any curated-tool route and more. A static
+    // annotation cannot see the per-call method, so it is declared destructive
+    // and non-idempotent conservatively: gating only the 5 named delete/clear
+    // tools and leaving this escape hatch ungated would let an injected agent
+    // route around the gate entirely (e.g. prism_request DELETE /api/projects/3
+    // instead of delete_project).
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false },
     build: (a) => {
       const method = String(a.method ?? "").toUpperCase();
       if (!["GET", "POST", "PATCH", "PUT", "DELETE"].includes(method)) {
@@ -580,7 +669,17 @@ function trimTrailingSlashes(s: string): string {
 export function prismUrl(env: McpEnv, call: PrismCall): string {
   const base = trimTrailingSlashes(env.PRISM_URL ?? "");
   if (!base) throw new Error("PRISM_URL is not configured");
+  const baseUrl = new URL(base);
   const url = new URL(base + call.path);
+  // Refuse a path that normalizes (via URL's own ".." collapsing) outside the
+  // mount PRISM_URL declares. A no-op for the documented bare-host deployment
+  // (mount is the origin root, nothing to escape into); load-bearing only for
+  // an operator running prism-mcp against a path-prefixed PRISM_URL.
+  const mount = baseUrl.pathname.replace(/\/+$/, "");
+  const withinMount = mount === "" || url.pathname === mount || url.pathname.startsWith(`${mount}/`);
+  if (url.origin !== baseUrl.origin || !withinMount) {
+    throw new Error(`path '${call.path}' escapes the configured PRISM_URL mount`);
+  }
   if (call.query) {
     for (const [k, v] of Object.entries(call.query)) {
       if (v !== undefined && v !== null && v !== "") url.searchParams.set(k, String(v));
@@ -625,14 +724,18 @@ async function readSseText(res: Response): Promise<string> {
   if (!reader) return "(empty stream)";
   const decoder = new TextDecoder();
   let raw = "";
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    raw += decoder.decode(value, { stream: true });
-    if (raw.length > MAX_SSE_CHARS) {
-      await reader.cancel();
-      return raw.slice(0, MAX_SSE_CHARS) + "\n... (SSE truncated)";
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      raw += decoder.decode(value, { stream: true });
+      if (raw.length > MAX_SSE_CHARS) {
+        await reader.cancel();
+        return raw.slice(0, MAX_SSE_CHARS) + "\n... (SSE truncated)";
+      }
     }
+  } catch (err) {
+    return raw + `\n... (SSE read failed: ${String(err)})`;
   }
   raw += decoder.decode();
   // Prefer concatenating data: text deltas when frames look like OpenAI/Anthropic SSE.
@@ -734,17 +837,44 @@ export async function runTool(
   if (isBinaryMedia) {
     const len = res.headers.get("content-length") ?? "unknown";
     if (opts.inlineImages && /^image\//i.test(ct) && !isError) {
-      const bytes = new Uint8Array(await res.arrayBuffer());
-      if (bytes.byteLength > MAX_INLINE_IMAGE_BYTES) {
+      const reader = res.body?.getReader();
+      if (!reader) {
+        return { content: [{ type: "text", text: `${line}\n\n(empty image body)` }], isError };
+      }
+      const chunks: Uint8Array[] = [];
+      let total = 0;
+      try {
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          total += value.byteLength;
+          // Enforce the inline cap AS WE READ so an oversized upstream body is
+          // never buffered in full before we decide to reject it.
+          if (total > MAX_INLINE_IMAGE_BYTES) {
+            await reader.cancel();
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `${line}\n\nImage exceeds the ${MAX_INLINE_IMAGE_BYTES}-byte inline cap (stopped after ${total} bytes read). Fetch via get_artifact or a shorter-lived client URL if available.`,
+                },
+              ],
+              isError,
+            };
+          }
+          chunks.push(value);
+        }
+      } catch (err) {
         return {
-          content: [
-            {
-              type: "text",
-              text: `${line}\n\nImage is ${bytes.byteLength} bytes, over the ${MAX_INLINE_IMAGE_BYTES}-byte inline cap. Fetch via get_artifact or a shorter-lived client URL if available.`,
-            },
-          ],
-          isError,
+          content: [{ type: "text", text: `${line}\n\nFailed reading image body: ${String(err)}` }],
+          isError: true,
         };
+      }
+      const bytes = new Uint8Array(total);
+      let offset = 0;
+      for (const c of chunks) {
+        bytes.set(c, offset);
+        offset += c.byteLength;
       }
       const mimeType = ct.split(";")[0].trim();
       return {
@@ -780,18 +910,25 @@ export async function runTool(
   }
   const chunks: Uint8Array[] = [];
   let total = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    total += value.byteLength;
-    if (total > maxRead) {
-      await reader.cancel();
-      return {
-        content: [{ type: "text", text: `${line}\n\nResponse too large (>${maxRead} bytes); not inlined.` }],
-        isError,
-      };
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > maxRead) {
+        await reader.cancel();
+        return {
+          content: [{ type: "text", text: `${line}\n\nResponse too large (>${maxRead} bytes); not inlined.` }],
+          isError,
+        };
+      }
+      chunks.push(value);
     }
-    chunks.push(value);
+  } catch (err) {
+    return {
+      content: [{ type: "text", text: `${line}\n\nFailed reading response body: ${String(err)}` }],
+      isError: true,
+    };
   }
   const raw = new TextDecoder().decode(
     chunks.reduce((acc, c) => {

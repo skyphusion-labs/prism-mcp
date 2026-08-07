@@ -1,5 +1,35 @@
 ## Unreleased
 
+### Added
+- Tool annotations (`readOnlyHint` / `destructiveHint` / `idempotentHint`, MCP 2025-06-18) on all
+  33 tools, so a client can auto-approve reads and gate the tools that can irreversibly change or
+  discard state (`delete_history`, `delete_conversation`, `delete_document`, `delete_project`,
+  `update_prefs`, `prism_request`) instead of prompting on every call or approving all 33 blind.
+  `prism_request` is marked destructive because its method and path are runtime arguments, so it
+  can issue a DELETE to any curated-tool route and more.
+
+### Fixed
+- `initialize` no longer echoes an unvalidated client `protocolVersion`; always responds with the
+  one version this server implements.
+- `prism_request` refused a path-prefixed `PRISM_URL` mount escape via `..` normalization
+  (`../../admin/keys` resolving outside the configured mount); bare-host deployments, the
+  documented default, are unaffected.
+- `create_project` and `import_discord` now enforce their own declared `inputSchema.required`
+  fields (`name`, `body`) instead of relying on the calling client to have validated them first.
+- `chat` / `chat_stream` now forward the trimmed `model` / `user_input` values they validate,
+  instead of validating a trimmed copy and sending the untrimmed originals.
+- `get_artifact` / `prism_request` now stream and check the 4MB image inline cap incrementally,
+  instead of buffering the full upstream body before checking it.
+- A body-read failure (SSE, image, or generic text) inside a tool call no longer escapes as a
+  thrown exception; batch requests no longer lose already-computed responses when a later element
+  fails mid-read.
+- JSON-RPC batches are capped at 50 messages; an oversized batch is refused with a JSON-RPC error
+  instead of making unbounded prism calls from one request.
+- Docs: scoped the "agent never sees the prism cookie" guarantee to normal use (it does not cover
+  a prism deployment whose own routes reflect session material back in a response), and documented
+  that `prism_request` and RAG/web-search-augmented `chat` output relay remote text verbatim into
+  the agent's context, untrusted and undelimited.
+
 ### Docs
 - README, `docs/mcp.md`, `docs/PARITY.md`: mermaid architecture, auth, job poll,
   compact, stack position, SPA↔tool map, voice workaround sequences (aligned with

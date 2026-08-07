@@ -7,7 +7,13 @@
 //
 // Two independent credentials:
 //   - MCP_TOKEN      gates THIS server (every /mcp needs Authorization: Bearer).
-//   - PRISM_SESSION  cookie value forwarded as __Host-prism_session; agent never sees it.
+//   - PRISM_SESSION  cookie value forwarded as __Host-prism_session; agent never
+//                    sees the cookie value itself in normal use. Caveat:
+//                    prism_request relays whatever body the target prism path
+//                    returns verbatim, so a prism route that reflects session
+//                    material back into a response body would still reach the
+//                    agent through that escape hatch (see docs/mcp.md "Security
+//                    boundary"). This server does not filter prism_request output.
 //
 // Long jobs (video/music, zip import) are agent-driven: chat returns a job id,
 // then the agent polls poll_job / poll_import. This server never long-polls.
@@ -19,6 +25,11 @@ import { TOOLS, TOOLS_BY_NAME, runTool } from "./mcp-tools.js";
 // tests/server-info-version.test.ts fails if these two disagree.
 const SERVER_INFO = { name: "prism", version: "1.0.0" };
 const PROTOCOL_VERSION = "2025-06-18";
+
+// A batch is one HTTP request driving N upstream prism calls from a single
+// MCP_TOKEN holder. Unbounded batching turns one request into unbounded billed
+// spend; cap it rather than trust the client to behave.
+const MAX_BATCH_SIZE = 50;
 
 function timingSafeEqual(a: string, b: string): boolean {
   if (a.length !== b.length) {
@@ -56,17 +67,25 @@ const PUBLIC_TOOLS = TOOLS.map((t) => ({
   name: t.name,
   description: t.description,
   inputSchema: t.inputSchema,
+  ...(t.annotations ? { annotations: t.annotations } : {}),
 }));
 
 async function handleRpc(msg: RpcMessage, env: McpEnv): Promise<unknown> {
   const { id, method, params } = msg;
   switch (method) {
-    case "initialize":
+    case "initialize": {
+      // This server implements exactly one protocol version. Per the MCP spec,
+      // when the client's requested version is not supported the server
+      // responds with a version it DOES support -- so we always answer with
+      // our own PROTOCOL_VERSION rather than trusting/echoing whatever the
+      // client sent (which may not even be a string; a numeric or bogus
+      // value must never reach the wire unvalidated).
       return rpcResult(id, {
-        protocolVersion: (params?.protocolVersion as string | undefined) || PROTOCOL_VERSION,
+        protocolVersion: PROTOCOL_VERSION,
         capabilities: { tools: {} },
         serverInfo: SERVER_INFO,
       });
+    }
     case "ping":
       return rpcResult(id, {});
     case "tools/list":
@@ -85,11 +104,21 @@ async function handleRpc(msg: RpcMessage, env: McpEnv): Promise<unknown> {
           isError: true,
         });
       }
-      const result = await runTool(env, call, {
-        inlineImages: tool.inlineImages === true,
-        collectSse: tool.collectSse === true,
-      });
-      return rpcResult(id, result);
+      try {
+        const result = await runTool(env, call, {
+          inlineImages: tool.inlineImages === true,
+          collectSse: tool.collectSse === true,
+        });
+        return rpcResult(id, result);
+      } catch (err) {
+        // Defense in depth: runTool guards its own body-read paths and should
+        // never throw, but a tool call that DOES throw must still become a
+        // JSON-RPC result, never an exception that reaches the fetch handler.
+        return rpcResult(id, {
+          content: [{ type: "text", text: `Tool call failed: ${String(err)}` }],
+          isError: true,
+        });
+      }
     }
     default:
       return rpcError(id, -32601, `Method not found: ${String(method)}`);
@@ -124,15 +153,35 @@ export default {
     const hasId = (m: RpcMessage) => m.id !== undefined && m.id !== null;
 
     if (Array.isArray(payload)) {
+      if (payload.length > MAX_BATCH_SIZE) {
+        return json(
+          rpcError(
+            null,
+            -32600,
+            `Batch of ${payload.length} messages exceeds the ${MAX_BATCH_SIZE}-message limit`,
+          ),
+        );
+      }
       const responses: unknown[] = [];
       for (const m of payload) {
-        if (hasId(m)) responses.push(await handleRpc(m, env));
+        if (!hasId(m)) continue;
+        try {
+          responses.push(await handleRpc(m, env));
+        } catch (err) {
+          // One message failing mid-read must not discard responses already
+          // computed for earlier elements in the same batch.
+          responses.push(rpcError(m.id ?? null, -32603, `Internal error: ${String(err)}`));
+        }
       }
       return responses.length ? json(responses) : json(null, 202);
     }
 
     if (!hasId(payload)) return json(null, 202);
 
-    return json(await handleRpc(payload, env));
+    try {
+      return json(await handleRpc(payload, env));
+    } catch (err) {
+      return json(rpcError(payload.id ?? null, -32603, `Internal error: ${String(err)}`));
+    }
   },
 };

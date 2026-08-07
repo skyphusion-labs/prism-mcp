@@ -131,6 +131,12 @@ flowchart LR
 Curated tools map 1:1 to prism routes (see prism `CLAUDE.md` Routes reference). Escape hatch:
 `prism_request` with `method` + `path`.
 
+Every tool carries MCP 2025-06-18 `annotations` (`readOnlyHint` / `destructiveHint` /
+`idempotentHint`) so a client can auto-approve reads and gate the tools that can irreversibly
+change or discard state: `delete_history`, `delete_conversation`, `delete_document`,
+`delete_project`, `update_prefs` (its `clear_*` fields discard a stored credential), and
+`prism_request` (a generic escape hatch that can issue any method, including DELETE, to any path).
+
 | Tool | Prism route |
 |------|-------------|
 | `health` / `health_deep` | `GET /health`, `GET /health/deep` |
@@ -219,6 +225,18 @@ flowchart TB
 
 - Agent compromise exposes `MCP_TOKEN` only; rotate without touching the prism account.
 - Prism session compromise is the same as a stolen browser cookie; revoke via logout / delete sessions on prism.
+- **The "agent never sees the cookie" guarantee is scoped to normal use, not enforced end to end.**
+  `prism_request` is a generic escape hatch: it attaches the session cookie / Access headers to
+  any path and relays whatever body comes back, unfiltered. On `play.skyphusion.org` no route
+  reflects session material into a response body, so the guarantee holds. A self-host or fork that
+  adds a route reflecting the cookie (or any secret) into its response would leak that value to the
+  agent through this door. This server does not filter `prism_request` output; treat that as a
+  property of your own prism deployment's routes, not of this server.
+- **Relayed prism output is untrusted content, not delimited or labelled as such.** Every tool
+  result is `<METHOD> <path> -> <status>` plus the raw body. `chat` / `chat_stream` with
+  `use_web_search` or `use_docs` set can carry attacker-influenced web/RAG text back into the
+  agent's context the same way; this is common MCP-proxy behavior, not unique to prism-mcp, but it
+  is a property an embedder should know rather than assume.
 - Never put secrets in the git repo or agent config files that get committed.
 
 ## Hosted door
