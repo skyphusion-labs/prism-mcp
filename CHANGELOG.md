@@ -1,3 +1,10 @@
+## Unreleased
+
+### Docs
+- README, `docs/mcp.md`, `docs/PARITY.md`: mermaid architecture, auth, job poll,
+  compact, stack position, SPA↔tool map, voice workaround sequences (aligned with
+  prism / plane / iOS README style).
+
 ## v1.0.0
 
 Agent HTTP parity release for Prism playground (play.skyphusion.org).
