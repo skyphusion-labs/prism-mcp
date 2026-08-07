@@ -2,6 +2,17 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import worker from "../src/mcp.js";
 import type { McpEnv } from "../src/mcp-env.js";
 import { TOOLS, PRISM_SESSION_COOKIE, prismUrl } from "../src/mcp-tools.js";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+
+// Derived, never transcribed: a hardcoded version here makes every release bump
+// a test edit, and a stale literal reads as a real failure (see
+// tests/server-info-version.test.ts, which pins the source literal to this file).
+const PKG_VERSION = (
+  JSON.parse(readFileSync(fileURLToPath(new URL("../package.json", import.meta.url)), "utf8")) as {
+    version: string;
+  }
+).version;
 
 const ENV: McpEnv = {
   PRISM_URL: "https://play.example.com",
@@ -133,7 +144,7 @@ describe("prism MCP transport", () => {
     );
     const body = (await res.json()) as { result: { serverInfo: { name: string; version: string } } };
     expect(body.result.serverInfo.name).toBe("prism");
-    expect(body.result.serverInfo.version).toBe("1.0.0");
+    expect(body.result.serverInfo.version).toBe(PKG_VERSION);
   });
 
   it("initialize never echoes an untrusted client protocolVersion", async () => {

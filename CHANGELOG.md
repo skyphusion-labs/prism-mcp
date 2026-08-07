@@ -1,4 +1,4 @@
-## Unreleased
+## v1.1.0
 
 ### Added
 - Tool annotations (`readOnlyHint` / `destructiveHint` / `idempotentHint`, MCP 2025-06-18) on all
@@ -35,6 +35,23 @@
   compact, stack position, SPA↔tool map, voice workaround sequences (aligned with
   prism / plane / iOS README style).
 
+
+### Also in this release (merged after the `v1.0.0` tag)
+
+- **`PRISM_URL` trailing-slash trimming no longer uses a regex.** `prismUrl` strips trailing ASCII
+  slashes with an index walk instead of `/\/+$/` (CodeQL `js/polynomial-redos`). (#8)
+- Docs: mermaid architecture and parity diagrams. (#7)
+- Docs: `CLAUDE.md` refreshed for the mcp 1.0.0 estate. (#9)
+
+### Release note
+
+- `v1.0.0` was tagged `v1.0.0`, which does not match this repo's `prism-mcp-v*` release tag, so it
+  ran neither the Worker deploy nor the npm publish. Measured: `deploy.yml` has exactly three runs
+  ever, the most recent for `prism-mcp-v0.1.2` on 2026-08-05, and npm `latest` is 0.1.3. The two
+  lines therefore sit at different places and this release moves both:
+  **Worker 0.1.2 -> 1.1.0** (seven commits, including the whole 1.0.0 agent-parity release) and
+  **npm 0.1.3 -> 1.1.0**, with no published 1.0.0 on either.
+- MINOR per SemVer: tool annotations are new API surface that clients consume.
 ## v1.0.0
 
 Agent HTTP parity release for Prism playground (play.skyphusion.org).
