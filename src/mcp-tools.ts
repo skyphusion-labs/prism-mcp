@@ -570,8 +570,15 @@ export const TOOLS_BY_NAME = new Map(TOOLS.map((t) => [t.name, t]));
 // HTTP to prism
 // ---------------------------------------------------------------------------
 
+/** Strip trailing ASCII slashes without a regex (CodeQL js/polynomial-redos). */
+function trimTrailingSlashes(s: string): string {
+  let end = s.length;
+  while (end > 0 && s.charCodeAt(end - 1) === 47 /* / */) end--;
+  return end === s.length ? s : s.slice(0, end);
+}
+
 export function prismUrl(env: McpEnv, call: PrismCall): string {
-  const base = (env.PRISM_URL ?? "").replace(/\/+$/, "");
+  const base = trimTrailingSlashes(env.PRISM_URL ?? "");
   if (!base) throw new Error("PRISM_URL is not configured");
   const url = new URL(base + call.path);
   if (call.query) {
