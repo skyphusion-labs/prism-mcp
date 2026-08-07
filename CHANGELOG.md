@@ -45,11 +45,12 @@
 
 ### Release note
 
-- `v1.0.0` was tagged `v1.0.0`, which does not match this repo's `prism-mcp-v*` release tag. That
-  tag therefore ran neither the Worker deploy nor the npm publish, so the live Worker and the npm
-  `latest` (0.1.3) both predate it. Tagging `prism-mcp-v1.1.0` ships everything from `v0.1.3`
-  onward, including the whole 1.0.0 agent-parity release; the npm line goes 0.1.3 -> 1.1.0 with no
-  published 1.0.0.
+- `v1.0.0` was tagged `v1.0.0`, which does not match this repo's `prism-mcp-v*` release tag, so it
+  ran neither the Worker deploy nor the npm publish. Measured: `deploy.yml` has exactly three runs
+  ever, the most recent for `prism-mcp-v0.1.2` on 2026-08-05, and npm `latest` is 0.1.3. The two
+  lines therefore sit at different places and this release moves both:
+  **Worker 0.1.2 -> 1.1.0** (seven commits, including the whole 1.0.0 agent-parity release) and
+  **npm 0.1.3 -> 1.1.0**, with no published 1.0.0 on either.
 - MINOR per SemVer: tool annotations are new API surface that clients consume.
 ## v1.0.0
 
