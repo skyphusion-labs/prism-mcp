@@ -23,7 +23,7 @@ import { TOOLS, TOOLS_BY_NAME, runTool } from "./mcp-tools.js";
 
 // KEEP IN SYNC WITH package.json "version". Wire-visible via initialize serverInfo;
 // tests/server-info-version.test.ts fails if these two disagree.
-const SERVER_INFO = { name: "prism", version: "1.0.0" };
+const SERVER_INFO = { name: "prism", version: "1.1.0" };
 const PROTOCOL_VERSION = "2025-06-18";
 
 // A batch is one HTTP request driving N upstream prism calls from a single
