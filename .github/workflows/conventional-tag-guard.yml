@@ -1,0 +1,185 @@
+name: conventional-tag-guard
+
+# WHY THIS EXISTS (fc#1640).
+#
+# This repo deliberately diverges from the estate tag convention: every other
+# repo deploys on a bare `v*` tag, this one deploys AND publishes on
+# `prism-mcp-v*`. On 2026-08-06 an estate-wide pass tagged this repo `v1.0.0`
+# like everything else. That tag matched no trigger here, so it fired no deploy
+# and no npm publish, silently. There was no failed run to notice because there
+# was no run at all, and an absent run is indistinguishable from a quiet period.
+#
+# THE PATTERN, which is the reusable part: IF YOU DIVERGE FROM AN ESTATE
+# CONVENTION, MAKE THE CONVENTIONAL FORM FAIL LOUDLY RATHER THAN QUIETLY DO
+# NOTHING. This workflow's only job is to turn that silence into a red run.
+#
+# WHY THE PREFIX STAYS, rather than moving this repo to bare `v*` (measured
+# 2026-08-08 under fc#1640; three independent dependencies, not one):
+#   1. deploy.yml gates the deploy JOB a second time on
+#      `startsWith(github.ref, 'refs/tags/prism-mcp-v')`. Widening only the
+#      `on:` filter would produce a GREEN run whose deploy job is SKIPPED,
+#      which is strictly worse than today's no-run-at-all: a skipped step and a
+#      passing one look the same.
+#   2. publish-npm.yml derives the version by STRIPPING the prefix
+#      (`tag="${tag#prism-mcp-v}"`) and comparing to package.json. A bare
+#      `v1.0.0` tag yields tag="v1.0.0" against pkg="1.0.0", so the publish
+#      fails the version-match step.
+#   3. `prism-mcp-v*` is the documented release convention in CLAUDE.md (this
+#      repo's authoritative doc), README.md, docs/mcp.md and CHANGELOG.md.
+#
+# THIS GUARD CANNOT FIRE ON A LEGITIMATE RELEASE, and that is measured rather
+# than assumed. Live probe 2026-08-08: two tags pushed at the SAME commit into a
+# scratch repo whose only workflow carried `on: push: tags: ["v*"]`. `v0.0.1`
+# fired (1 run); `prism-mcp-v1.1.0` did not (0 runs); both refs were confirmed
+# present on the remote, so the zero is a real zero and not a failed push.
+# GitHub's `v*` filter anchors at the start of the tag name, so the prefixed
+# form is outside its population by construction. Retrospectively, across this
+# repo's entire tag history (5 tags) this guard fires on exactly ONE, the
+# `v1.0.0` that is the defect, and stays silent on all four real releases.
+# There is deliberately NO redundant `if:` on the job: the measurement says one
+# is not needed, and a redundant guard encoding a belief nobody re-tested is how
+# a wrong belief survives its own correction.
+#
+# KNOWN RESIDUAL, stated rather than left implicit: this guard watches the tag
+# PUSH. Publishing a GitHub Release from an already-existing prefixed tag emits
+# `release: published` and no push, and is not covered here. That path cannot
+# produce this defect, because the defect is a tag whose NAME matches no
+# trigger and such a tag must be pushed before any release can reference it.
+#
+# NOTIFICATION REACH, so nobody over-reads this: a red run here is visible in
+# the Actions tab and in `gh run list`, and GitHub emails the actor who pushed
+# the tag under its default notification settings. It is not a paged alert and
+# it does not block anything. It converts silence into a signal; it does not
+# guarantee the signal is read.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: conventional-tag-guard-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  refuse:
+    name: this tag deploys nothing
+    # PUBLIC repo -> GitHub-hosted runner, fork-safe (estate CI policy).
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Refuse a tag that matches no trigger in this repo
+        env:
+          PUSHED_REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          tag="${PUSHED_REF#refs/tags/}"
+
+          # Derive the real patterns from the workflow files rather than
+          # restating them here. A hand-maintained copy of a fact that lives
+          # somewhere else drifts from it, and this message is read at exactly
+          # the moment somebody is already confused.
+          # This guard must exclude ITSELF from the derivation. It listens on
+          # `v*` by design, so leaving it in would print "this repo listens on
+          # v*" directly above "your v* tag matched nothing" -- a
+          # self-contradicting message, in the one place a confused reader
+          # looks. The exclusion is PRINTED, because a silent exclusion is the
+          # same defect wearing a different hat.
+          #
+          # Resolve self from GITHUB_WORKFLOW_REF where GitHub provides it, so
+          # a rename does not silently un-exclude us; fall back to the literal
+          # path off-runner. Either way, REFUSE if the resolved path is not
+          # actually present, so a rename fails loudly instead of quietly
+          # restoring the bug.
+          self_ref="${GITHUB_WORKFLOW_REF:-}"
+          if [ -n "$self_ref" ]; then
+            self="${self_ref%@*}"
+            self="${self#*/*/}"
+          else
+            self=".github/workflows/conventional-tag-guard.yml"
+          fi
+          if [ ! -e "$self" ]; then
+            echo "::error title=Guard cannot locate itself::Resolved self path '$self' does not exist, so the self-exclusion below is not in effect and this message would contradict itself. Fix the resolution (was this workflow renamed?)."
+            exit 1
+          fi
+
+          echo "Tag-gated workflows in this repo, and the patterns they listen on:"
+          found=0
+          excluded=0
+          for f in .github/workflows/*.yml; do
+            [ -e "$f" ] || continue
+            if [ "$f" = "$self" ]; then
+              excluded=$((excluded + 1))
+              continue
+            fi
+            if grep -qE '^[[:space:]]*tags:' "$f"; then
+              found=$((found + 1))
+              awk '
+                /^[[:space:]]*tags:[[:space:]]*/ { p=1; print "      " FILENAME ": " $0; next }
+                p && /^[[:space:]]*-[[:space:]]/ { print "      " FILENAME ": " $0; next }
+                p { p=0 }
+              ' "$f"
+            fi
+          done
+          echo "  tag-gated workflows found: $found"
+          echo "  excluded from the list: $excluded ($self, which listens on v* by design)"
+
+          # An extraction that finds nothing must not be reported as a result.
+          # This refusal is deliberately distinguishable from the one below, so
+          # `exit 1` is evidence about which condition fired rather than a
+          # coincidence.
+          if [ "$found" -eq 0 ]; then
+            echo "::error title=Guard matcher is broken::Extracted ZERO tag-gated workflows from .github/workflows. This guard cannot describe the repo it is guarding. Fix the extraction before trusting anything above."
+            exit 1
+          fi
+
+          echo
+          echo "::error title=This tag deployed nothing::The tag '${tag}' matches no trigger in this repo. No deploy ran and no npm publish ran."
+          echo "REFUSED_TAG=${tag}" >&2
+
+          cat >&2 <<'MSG'
+
+          ================================================================
+          THIS TAG DEPLOYED NOTHING AND PUBLISHED NOTHING.
+          ================================================================
+
+          Every other repo in the estate ships on a bare 'v*' tag. This one
+          does not: it deploys the Worker and publishes the npm package on
+          'prism-mcp-v<version>' only. A bare 'v*' tag here is inert.
+
+          This job exists so that inertness is RED instead of silent. Nothing
+          is broken in CI. The release simply did not happen.
+
+          WHAT TO DO
+
+            1. Do NOT move or delete an existing release tag to 'fix' this.
+               A tag is the record of what happened. Ship forward.
+
+            2. Re-tag with the prefix, at the commit you meant to ship:
+
+                 git tag -a prism-mcp-vVERSION -m "prism-mcp VERSION" SHA
+                 git push origin prism-mcp-vVERSION
+
+               VERSION must equal the "version" field of package.json, and the
+               commit must already be on main. Both are asserted by the deploy
+               and publish workflows, which refuse otherwise.
+
+            3. Decide what to do with the refused tag. Leaving it is fine and
+               is usually right: it is a true record that this label was
+               applied. It just never meant "this shipped".
+
+          WHY THIS REPO DIVERGES: measured under fc#1640. deploy.yml gates its
+          deploy job a second time on the 'prism-mcp-v' prefix, and
+          publish-npm.yml strips that prefix to derive the version it matches
+          against package.json. Moving to bare 'v*' means changing all three
+          places plus the documented convention in CLAUDE.md, README.md,
+          docs/mcp.md and CHANGELOG.md. Keeping the prefix and making the
+          conventional form loud is the smaller and safer change.
+
+          ================================================================
+          MSG
+          exit 1
