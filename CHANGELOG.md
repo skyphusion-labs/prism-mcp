@@ -1,3 +1,12 @@
+## Unreleased
+
+### Fixed
+- Split the escape hatch (#12): `prism_request_read` (GET/HEAD, `READ_ONLY`) and
+  `prism_request_write` (POST/PATCH/PUT/DELETE, destructive). `prism_request` is
+  now a write-only alias, so a GET no longer raises a destructive prompt.
+  Measured against prism `src/index.ts`: signup/login/logout and the CSP
+  collector are POST; every GET `/api/*` handler is a list/get/poll/read.
+
 ## v1.1.0
 
 ### Added

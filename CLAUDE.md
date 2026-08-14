@@ -49,7 +49,8 @@ npm run build
   cookie never leaves the Worker.
 - **No prism bindings.** Pure HTTP to `PRISM_URL`.
 - **Stateless.** Video/music/zip jobs: agent polls `poll_job` / `poll_import`.
-- **One tool, one route** (+ `prism_request` escape hatch). Live WebSocket STT
+- **One tool, one route** (+ `prism_request_read` / `prism_request_write` escape
+  hatch; `prism_request` is a write-only alias). Live WebSocket STT
   (`/api/stt/stream`) is out of scope for MCP tools.
 
 ```mermaid

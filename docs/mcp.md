@@ -129,13 +129,14 @@ flowchart LR
 ## Tool reference
 
 Curated tools map 1:1 to prism routes (see prism `CLAUDE.md` Routes reference). Escape hatch:
-`prism_request` with `method` + `path`.
+`prism_request_read` (GET/HEAD) or `prism_request_write` (POST/PATCH/PUT/DELETE)
+with `method` + `path`. `prism_request` is a write-only alias.
 
 Every tool carries MCP 2025-06-18 `annotations` (`readOnlyHint` / `destructiveHint` /
 `idempotentHint`) so a client can auto-approve reads and gate the tools that can irreversibly
 change or discard state: `delete_history`, `delete_conversation`, `delete_document`,
 `delete_project`, `update_prefs` (its `clear_*` fields discard a stored credential), and
-`prism_request` (a generic escape hatch that can issue any method, including DELETE, to any path).
+`prism_request_write` / `prism_request` (write escape hatch). Reads go through `prism_request_read`.
 
 | Tool | Prism route |
 |------|-------------|
@@ -157,7 +158,8 @@ change or discard state: `delete_history`, `delete_conversation`, `delete_docume
 | `import_discord` | Discord ingest on a project |
 | `poll_job` | `GET /api/job/:id` |
 | `get_artifact` | `GET /api/artifact/*` |
-| `prism_request` | any path |
+| `prism_request_read` | GET/HEAD any path |
+| `prism_request_write` (`prism_request` alias) | POST/PATCH/PUT/DELETE any path |
 
 Full parity matrix: [PARITY.md](./PARITY.md).
 
@@ -197,13 +199,14 @@ mindmap
       poll_job
       get_artifact
     Escape
-      prism_request
+      prism_request_read
+      prism_request_write
 ```
 
 ### Out of scope (v1.0)
 
 - **WebSocket STT / live voice chat** (`/api/stt/stream`): duplex Flux mic; not MCP request/response. Approximate with batch STT `chat` + `tts`.
-- **Account delete**: use the SPA or `prism_request` deliberately.
+- **Account delete**: use the SPA or `prism_request_write` deliberately.
 - **Control plane (play-proxy)**: this door is playground prism only; prefs may store a `pcp_` for hybrid use on the prism Worker.
 
 ## Security boundary

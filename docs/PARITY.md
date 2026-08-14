@@ -7,7 +7,7 @@ as completely as a human in the browser?
 
 | Layer | Status |
 | --- | --- |
-| **HTTP `/api/*` (agent-usable)** | **Yes** -- curated tools + `prism_request` |
+| **HTTP `/api/*` (agent-usable)** | **Yes** -- curated tools + `prism_request_read` / `prism_request_write` |
 | **Real-time live mic / voice chat** | **No** -- WebSocket Flux not MCP-transportable |
 | **Native control plane (iOS-style)** | **Out of scope** -- this MCP talks to **prism**, not play-proxy |
 
@@ -53,8 +53,8 @@ flowchart TB
 | Discord import | `import_discord` | |
 | Long video/music jobs | `chat` + `poll_job` | |
 | Download artifacts | `get_artifact` | Images may inline |
-| Signup / login / logout | `prism_request` | Session usually operator-seeded |
-| Delete account | `prism_request` | Deliberate; not a casual tool |
+| Signup / login / logout | `prism_request_write` | Session usually operator-seeded |
+| Delete account | `prism_request_write` | Deliberate; not a casual tool |
 | Deep health | `health_deep` | |
 | **Live Flux mic / voice chat loop** | **none** | WS `/api/stt/stream` |
 | Continuous token streaming UI | n/a | Agents get drained SSE |
@@ -146,7 +146,7 @@ flowchart TB
   subgraph v10["v1.0.0 shipped"]
     HTTP["Full HTTP /api/* tools"]
     Compact["compact_conversation"]
-    Escape["prism_request"]
+    Escape["prism_request_read / prism_request_write"]
   end
 
   subgraph later["Optional later (not blocking 1.0)"]
@@ -160,4 +160,4 @@ flowchart TB
 
 ## Tool count (v1.0.0)
 
-31 curated tools + `prism_request` escape hatch (see `src/mcp-tools.ts`).
+32 curated tools + `prism_request_read` / `prism_request_write` (see `src/mcp-tools.ts`).
