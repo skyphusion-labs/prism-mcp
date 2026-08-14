@@ -118,6 +118,8 @@ describe("prism MCP transport", () => {
     expect(names).toContain("list_projects");
     expect(names).toContain("upload_document");
     expect(names).toContain("get_artifact");
+    expect(names).toContain("prism_request_read");
+    expect(names).toContain("prism_request_write");
     expect(names).toContain("prism_request");
     expect(names.length).toBe(TOOLS.length);
   });
@@ -132,7 +134,9 @@ describe("prism MCP transport", () => {
     };
     const byName = new Map(body.result.tools.map((t) => [t.name, t.annotations]));
     expect(byName.get("delete_project")).toMatchObject({ destructiveHint: true });
+    expect(byName.get("prism_request_write")).toMatchObject({ destructiveHint: true });
     expect(byName.get("prism_request")).toMatchObject({ destructiveHint: true });
+    expect(byName.get("prism_request_read")).toMatchObject({ readOnlyHint: true, destructiveHint: false });
     expect(byName.get("health")).toMatchObject({ readOnlyHint: true, destructiveHint: false });
     expect(byName.get("list_projects")).toMatchObject({ readOnlyHint: true });
   });
@@ -193,7 +197,7 @@ describe("prism MCP transport", () => {
         jsonrpc: "2.0",
         id: "b",
         method: "tools/call",
-        params: { name: "prism_request", arguments: { method: "GET", path: "/api/whatever" } },
+        params: { name: "prism_request_read", arguments: { method: "GET", path: "/api/whatever" } },
       },
       { jsonrpc: "2.0", id: "c", method: "ping" },
     ];
@@ -328,9 +332,50 @@ describe("prism MCP tool dispatch", () => {
     expect(calls).toHaveLength(0);
   });
 
-  it("prism_request escape hatch", async () => {
+  it("prism_request_read escape hatch", async () => {
     stubFetch({ ok: true }, 200);
     await worker.fetch(
+      mcpRequest(
+        {
+          jsonrpc: "2.0",
+          id: 15,
+          method: "tools/call",
+          params: {
+            name: "prism_request_read",
+            arguments: { method: "GET", path: "/api/prefs" },
+          },
+        },
+        AUTH,
+      ),
+      ENV,
+    );
+    expect(calls[0].url).toBe("https://play.example.com/api/prefs");
+  });
+
+  it("prism_request_read refuses a write method", async () => {
+    const res = await worker.fetch(
+      mcpRequest(
+        {
+          jsonrpc: "2.0",
+          id: 15,
+          method: "tools/call",
+          params: {
+            name: "prism_request_read",
+            arguments: { method: "DELETE", path: "/api/projects/3" },
+          },
+        },
+        AUTH,
+      ),
+      ENV,
+    );
+    const body = (await res.json()) as { result: { isError: boolean; content: { text: string }[] } };
+    expect(body.result.isError).toBe(true);
+    expect(body.result.content[0].text).toMatch(/invalid method/);
+    expect(calls).toHaveLength(0);
+  });
+
+  it("prism_request (write alias) refuses GET", async () => {
+    const res = await worker.fetch(
       mcpRequest(
         {
           jsonrpc: "2.0",
@@ -345,7 +390,10 @@ describe("prism MCP tool dispatch", () => {
       ),
       ENV,
     );
-    expect(calls[0].url).toBe("https://play.example.com/api/prefs");
+    const body = (await res.json()) as { result: { isError: boolean; content: { text: string }[] } };
+    expect(body.result.isError).toBe(true);
+    expect(body.result.content[0].text).toMatch(/invalid method/);
+    expect(calls).toHaveLength(0);
   });
 
   it("bad tool arguments become isError results", async () => {
@@ -452,7 +500,7 @@ describe("prism MCP tool dispatch", () => {
           jsonrpc: "2.0",
           id: 21,
           method: "tools/call",
-          params: { name: "prism_request", arguments: { method: "GET", path: "/api/whatever" } },
+          params: { name: "prism_request_read", arguments: { method: "GET", path: "/api/whatever" } },
         },
         AUTH,
       ),

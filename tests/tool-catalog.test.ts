@@ -37,22 +37,24 @@ const REQUIRED_TOOLS = [
   "import_discord",
   "poll_job",
   "get_artifact",
+  "prism_request_read",
+  "prism_request_write",
   "prism_request",
 ] as const;
 
 // The complete set of tools that either irreversibly discard data
 // (delete_history / delete_conversation / delete_document / delete_project),
 // irreversibly discard a stored credential (update_prefs' clear_* fields), or
-// CAN do either of those at runtime because the method/path are arguments
-// rather than fixed (prism_request). Kept as its own named list, checked
-// against TOOLS by a derived filter below, so the two can disagree loudly
-// instead of one hand-maintained list silently drifting from the other.
+// CAN do either of those at runtime because the write method/path are
+// arguments rather than fixed (prism_request_write and the deprecated
+// prism_request alias). prism_request_read is GET/HEAD only and is not here.
 const DESTRUCTIVE_TOOLS = [
   "delete_history",
   "delete_conversation",
   "delete_document",
   "delete_project",
   "update_prefs",
+  "prism_request_write",
   "prism_request",
 ] as const;
 

@@ -1,7 +1,9 @@
 // Prism MCP -- tool catalog + dispatch.
 //
 // Each curated tool maps to one prism route (CLAUDE.md "Routes reference" in
-// skyphusion-labs/prism). `prism_request` is the escape hatch for any other path.
+// skyphusion-labs/prism). Escape hatch is split: `prism_request_read` (GET/HEAD)
+// and `prism_request_write` (POST/PATCH/PUT/DELETE). `prism_request` is a
+// write-only alias so a GET no longer trips a destructive prompt.
 // Stateless: long jobs are agent-driven via poll_job / poll_import.
 //
 // Auth to prism: Cookie __Host-prism_session (PRISM_SESSION secret), optional
@@ -96,6 +98,28 @@ function artifactKeyPath(raw: string): string {
     throw new Error(`invalid artifact key '${raw}'`);
   }
   return raw.split("/").map(encodeURIComponent).join("/");
+}
+
+const READ_METHODS = ["GET", "HEAD"] as const;
+const WRITE_METHODS = ["POST", "PATCH", "PUT", "DELETE"] as const;
+
+function buildEscapeHatch(
+  a: Record<string, unknown>,
+  allowed: readonly string[],
+): PrismCall {
+  const method = String(a.method ?? "").toUpperCase();
+  if (!allowed.includes(method)) {
+    throw new Error(`invalid method '${String(a.method)}'`);
+  }
+  const path = reqStr(a, "path");
+  if (!path.startsWith("/")) throw new Error("path must start with '/'");
+  const query =
+    a.query && typeof a.query === "object"
+      ? (a.query as Record<string, string | number | undefined>)
+      : undefined;
+  let body = a.body;
+  if (body !== undefined) body = parseBodyArg(body);
+  return { method, path, query, body };
 }
 
 function bodyMinus(
@@ -605,20 +629,46 @@ export const TOOLS: McpTool[] = [
   },
 
   // --- escape hatch ----------------------------------------------------------
+  // Split by capability (issue #12). A static annotation cannot see the
+  // per-call method, so one kitchen-sink tool had to be marked destructive
+  // even for GET /api/history. Reads use READ_ONLY; writes stay gated.
+  // Measured on prism src/index.ts 2026-08-14: signup/login/logout and the
+  // CSP collector are POST; every GET /api/* handler is a list/get/poll/read.
   {
-    name: "prism_request",
+    name: "prism_request_read",
     description:
-      "Generic escape hatch to any prism path (method + path + optional query/JSON body). " +
-      "Use for routes not covered by a curated tool (e.g. /api/auth/login). " +
-      "path must start with '/'. Session cookie is still attached. Binary responses are summarized.",
+      "Read-only escape hatch (GET or HEAD + path + optional query). " +
+      "Use for routes not covered by a curated tool. path must start with '/'. " +
+      "Session cookie is still attached. Binary responses are summarized.",
     inputSchema: OBJ(
       {
         method: {
           type: "string",
-          enum: ["GET", "POST", "PATCH", "PUT", "DELETE"],
-          description: "HTTP method.",
+          enum: [...READ_METHODS],
+          description: "HTTP method (GET or HEAD).",
         },
         path: STR("Path starting with '/', e.g. '/api/history'."),
+        query: { type: "object", description: "Optional query params." },
+      },
+      ["method", "path"],
+    ),
+    annotations: READ_ONLY,
+    build: (a) => buildEscapeHatch(a, READ_METHODS),
+  },
+  {
+    name: "prism_request_write",
+    description:
+      "Write escape hatch (POST / PATCH / PUT / DELETE + path + optional query/JSON body). " +
+      "Use for routes not covered by a curated tool (e.g. /api/auth/login, DELETE /api/account). " +
+      "path must start with '/'. Session cookie is still attached.",
+    inputSchema: OBJ(
+      {
+        method: {
+          type: "string",
+          enum: [...WRITE_METHODS],
+          description: "HTTP method (write).",
+        },
+        path: STR("Path starting with '/', e.g. '/api/auth/login'."),
         query: { type: "object", description: "Optional query params." },
         body: {
           type: ["object", "string"],
@@ -627,29 +677,32 @@ export const TOOLS: McpTool[] = [
       },
       ["method", "path"],
     ),
-    // The method/path are runtime arguments, so this tool CAN issue a DELETE
-    // (or any other write) to any curated-tool route and more. A static
-    // annotation cannot see the per-call method, so it is declared destructive
-    // and non-idempotent conservatively: gating only the 5 named delete/clear
-    // tools and leaving this escape hatch ungated would let an injected agent
-    // route around the gate entirely (e.g. prism_request DELETE /api/projects/3
-    // instead of delete_project).
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false },
-    build: (a) => {
-      const method = String(a.method ?? "").toUpperCase();
-      if (!["GET", "POST", "PATCH", "PUT", "DELETE"].includes(method)) {
-        throw new Error(`invalid method '${String(a.method)}'`);
-      }
-      const path = reqStr(a, "path");
-      if (!path.startsWith("/")) throw new Error("path must start with '/'");
-      const query =
-        a.query && typeof a.query === "object"
-          ? (a.query as Record<string, string | number | undefined>)
-          : undefined;
-      let body = a.body;
-      if (body !== undefined) body = parseBodyArg(body);
-      return { method, path, query, body };
-    },
+    build: (a) => buildEscapeHatch(a, WRITE_METHODS),
+  },
+  {
+    name: "prism_request",
+    description:
+      "Deprecated alias of prism_request_write. Write methods only (POST / PATCH / PUT / DELETE). " +
+      "For GET or HEAD use prism_request_read so a client can auto-approve the read.",
+    inputSchema: OBJ(
+      {
+        method: {
+          type: "string",
+          enum: [...WRITE_METHODS],
+          description: "HTTP method (write). GET/HEAD belong on prism_request_read.",
+        },
+        path: STR("Path starting with '/'."),
+        query: { type: "object", description: "Optional query params." },
+        body: {
+          type: ["object", "string"],
+          description: "Optional JSON body (object or JSON-encoded string).",
+        },
+      },
+      ["method", "path"],
+    ),
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false },
+    build: (a) => buildEscapeHatch(a, WRITE_METHODS),
   },
 ];
 

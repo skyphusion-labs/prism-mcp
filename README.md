@@ -26,7 +26,7 @@ flowchart TB
 
   subgraph mcp["Worker: prism-mcp<br/>prism-mcp.skyphusion.org"]
     Gate["Bearer MCP_TOKEN"]
-    Tools["32 curated tools + prism_request"]
+    Tools["32 curated tools + read/write escape hatch"]
     Proxy["HTTPS proxy<br/>Cookie __Host-prism_session"]
     Gate --> Tools --> Proxy
   end
@@ -190,9 +190,9 @@ Access-mode / Access-fronted self-hosts.
 | RAG | `list/get/upload/delete_document`, `poll_import` |
 | Projects | CRUD, attach/detach docs, `import_discord` |
 | Jobs / media | `poll_job`, `get_artifact` |
-| Escape | `prism_request` (any path) |
+| Escape | `prism_request_read` / `prism_request_write` |
 
-**32 curated tools** + `prism_request`. Full route map: [docs/mcp.md](docs/mcp.md).  
+**32 curated tools** + `prism_request_read` / `prism_request_write`. Full route map: [docs/mcp.md](docs/mcp.md).  
 **Not a tool:** WebSocket `/api/stt/stream` (live Flux). Approximate with STT `chat` + `tts`.
 
 ## Package layout
