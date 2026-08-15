@@ -1,14 +1,14 @@
 name: Publish npm package
 
-# Tag: git tag prism-mcp-v0.1.0 && git push origin prism-mcp-v0.1.0
+# Publish: cut a GitHub Release from an existing prism-mcp-v* tag.
 # Or: workflow_dispatch (uses version in package.json).
+# A tag push alone deploys the Worker (deploy.yml) and does not publish.
 #
 # Required repo secret: NPM_TOKEN
 
 on:
-  push:
-    tags:
-      - "prism-mcp-v*"
+  release:
+    types: [published]
   workflow_dispatch:
 
 permissions:
@@ -38,10 +38,15 @@ jobs:
       - run: npm ci
       - run: npm run typecheck && npm test && npm run build
       - name: Verify tag matches package version
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+        if: github.event_name == 'release'
+        # Route the (maintainer-controlled but still untrusted) tag through env
+        # rather than interpolating it into the script body, so a tag containing
+        # shell metacharacters ($ ( ) backticks) cannot inject into the run step.
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: |
           set -euo pipefail
-          tag="${GITHUB_REF#refs/tags/}"
+          tag="$RELEASE_TAG"
           tag="${tag#prism-mcp-v}"
           pkg="$(node -p "require('./package.json').version")"
           if [ "$tag" != "$pkg" ]; then
