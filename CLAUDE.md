@@ -72,8 +72,8 @@ Public docs with full diagrams: `README.md`, `docs/mcp.md`, `docs/PARITY.md`.
 
 ## Crew + identity
 
-Conrad laptop commits: `Conrad Rockenhaus <conrad@skyphusion.org>`. Crew on dischord: member
-identity via `sudo -u <member>`. Conventional Commits; SemVer on the package.
+Conrad laptop commits: `Conrad Rockenhaus <conrad@skyphusion.org>`. Crew: member
+identity via `sudo -n -H -u <member> bash -lc`. Conventional Commits; SemVer on the package.
 
 ## Hosted door
 
