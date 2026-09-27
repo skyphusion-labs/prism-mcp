@@ -614,3 +614,46 @@ describe("chat_stream failure reporting", () => {
     expect(body.result.content[0].text).toMatch(/hello/);
   });
 });
+
+describe("JSON-RPC request shape validation", () => {
+  function rawRequest(raw: string): Request {
+    return new Request("https://prism-mcp.example.com/mcp", {
+      method: "POST",
+      headers: { "content-type": "application/json", ...AUTH },
+      body: raw,
+    });
+  }
+
+  it("a null body is Invalid Request (-32600), not a thrown 500", async () => {
+    const res = await worker.fetch(rawRequest("null"), ENV);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { error: { code: number } };
+    expect(body.error.code).toBe(-32600);
+  });
+
+  it("a null batch element is answered with -32600 and does not discard valid elements", async () => {
+    const res = await worker.fetch(
+      rawRequest(JSON.stringify([null, { jsonrpc: "2.0", id: 40, method: "ping" }])),
+      ENV,
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { id?: number; error?: { code: number } }[];
+    expect(body).toHaveLength(2);
+    expect(body[0].error?.code).toBe(-32600);
+    expect(body[1].id).toBe(40);
+  });
+
+  it("an empty batch is Invalid Request (-32600)", async () => {
+    const res = await worker.fetch(rawRequest("[]"), ENV);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { error: { code: number } };
+    expect(body.error.code).toBe(-32600);
+  });
+
+  it("a non-object body is Invalid Request (-32600)", async () => {
+    const res = await worker.fetch(rawRequest("42"), ENV);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { error: { code: number } };
+    expect(body.error.code).toBe(-32600);
+  });
+});
