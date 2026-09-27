@@ -151,8 +151,14 @@ export default {
     }
 
     const hasId = (m: RpcMessage) => m.id !== undefined && m.id !== null;
+    // A JSON-RPC message is an object; null, numbers, strings and nested arrays
+    // are Invalid Request rather than something to dereference.
+    const isMessage = (m: unknown): m is RpcMessage =>
+      m !== null && typeof m === "object" && !Array.isArray(m);
+    const invalidRequest = () => rpcError(null, -32600, "Invalid Request");
 
     if (Array.isArray(payload)) {
+      if (payload.length === 0) return json(invalidRequest());
       if (payload.length > MAX_BATCH_SIZE) {
         return json(
           rpcError(
@@ -163,7 +169,11 @@ export default {
         );
       }
       const responses: unknown[] = [];
-      for (const m of payload) {
+      for (const m of payload as unknown[]) {
+        if (!isMessage(m)) {
+          responses.push(invalidRequest());
+          continue;
+        }
         if (!hasId(m)) continue;
         try {
           responses.push(await handleRpc(m, env));
@@ -176,6 +186,7 @@ export default {
       return responses.length ? json(responses) : json(null, 202);
     }
 
+    if (!isMessage(payload)) return json(invalidRequest());
     if (!hasId(payload)) return json(null, 202);
 
     try {
