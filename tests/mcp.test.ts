@@ -657,3 +657,47 @@ describe("JSON-RPC request shape validation", () => {
     expect(body.error.code).toBe(-32600);
   });
 });
+
+describe("DELETE request bodies", () => {
+  it("prism_request_write forwards a JSON body on DELETE", async () => {
+    stubFetch({ ok: true });
+    const res = await worker.fetch(
+      mcpRequest(
+        {
+          jsonrpc: "2.0",
+          id: 50,
+          method: "tools/call",
+          params: {
+            name: "prism_request_write",
+            arguments: { method: "DELETE", path: "/api/account", body: { password: "pw" } },
+          },
+        },
+        AUTH,
+      ),
+      ENV,
+    );
+    expect(res.status).toBe(200);
+    expect(calls).toHaveLength(1);
+    expect(calls[0].init.method).toBe("DELETE");
+    expect(calls[0].init.body).toBe(JSON.stringify({ password: "pw" }));
+    expect((calls[0].init.headers as Record<string, string>)["Content-Type"]).toBe("application/json");
+  });
+
+  it("a curated DELETE tool sends no body", async () => {
+    stubFetch({ ok: true });
+    await worker.fetch(
+      mcpRequest(
+        {
+          jsonrpc: "2.0",
+          id: 51,
+          method: "tools/call",
+          params: { name: "delete_history", arguments: { id: 3 } },
+        },
+        AUTH,
+      ),
+      ENV,
+    );
+    expect(calls[0].init.method).toBe("DELETE");
+    expect(calls[0].init.body).toBeUndefined();
+  });
+});
