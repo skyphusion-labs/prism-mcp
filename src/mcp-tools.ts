@@ -858,7 +858,9 @@ export async function runTool(
 
   const headers = buildPrismHeaders(env);
   const init: RequestInit = { method: call.method, headers };
-  const sendsBody = call.method !== "GET" && call.method !== "DELETE" && call.method !== "HEAD";
+  // DELETE keeps its body: the write escape hatch accepts one and some routes
+  // (DELETE /api/account) read a JSON body. Curated DELETE tools set none.
+  const sendsBody = call.method !== "GET" && call.method !== "HEAD";
   if (call.body !== undefined && sendsBody) {
     headers["Content-Type"] = "application/json";
     init.body = JSON.stringify(call.body);
