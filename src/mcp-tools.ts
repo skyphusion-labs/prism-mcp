@@ -772,9 +772,9 @@ function toBase64(bytes: Uint8Array): string {
   return btoa(bin);
 }
 
-async function readSseText(res: Response): Promise<string> {
+async function readSseText(res: Response): Promise<{ text: string; failed: boolean }> {
   const reader = res.body?.getReader();
-  if (!reader) return "(empty stream)";
+  if (!reader) return { text: "(empty stream)", failed: false };
   const decoder = new TextDecoder();
   let raw = "";
   try {
@@ -784,21 +784,28 @@ async function readSseText(res: Response): Promise<string> {
       raw += decoder.decode(value, { stream: true });
       if (raw.length > MAX_SSE_CHARS) {
         await reader.cancel();
-        return raw.slice(0, MAX_SSE_CHARS) + "\n... (SSE truncated)";
+        return { text: raw.slice(0, MAX_SSE_CHARS) + "\n... (SSE truncated)", failed: false };
       }
     }
   } catch (err) {
-    return raw + `\n... (SSE read failed: ${String(err)})`;
+    return { text: raw + `\n... (SSE read failed: ${String(err)})`, failed: true };
   }
   raw += decoder.decode();
   // Prefer concatenating data: text deltas when frames look like OpenAI/Anthropic SSE.
   const texts: string[] = [];
+  // prism answers a stream 200 and reports a failed generation in-band as an
+  // {type:"error"} frame, so the frame (not the HTTP status) decides success.
+  const errors: string[] = [];
   for (const line of raw.split(/\r?\n/)) {
     if (!line.startsWith("data:")) continue;
     const payload = line.startsWith("data: ") ? line.slice(6) : line.slice(5);
     if (payload === "[DONE]") continue;
     try {
       const j = JSON.parse(payload) as Record<string, unknown>;
+      if (j.type === "error") {
+        errors.push(typeof j.message === "string" ? j.message : payload);
+        continue;
+      }
       // OpenAI-style
       const choices = j.choices as Array<{ delta?: { content?: string }; text?: string }> | undefined;
       if (choices?.[0]?.delta?.content) texts.push(choices[0].delta.content);
@@ -813,8 +820,12 @@ async function readSseText(res: Response): Promise<string> {
       // non-JSON data line: keep raw
     }
   }
-  if (texts.length) return texts.join("");
-  return raw.length > 16_000 ? raw.slice(0, 16_000) + "\n... (truncated)" : raw;
+  const failed = errors.length > 0;
+  if (texts.length) {
+    const collected = texts.join("");
+    return { text: failed ? `${collected}\n... (stream error: ${errors.join("; ")})` : collected, failed };
+  }
+  return { text: raw.length > 16_000 ? raw.slice(0, 16_000) + "\n... (truncated)" : raw, failed };
 }
 
 export async function runTool(
@@ -869,8 +880,8 @@ export async function runTool(
   const line = `${call.method} ${call.path} -> ${status}`;
 
   if (opts.collectSse && /text\/event-stream/i.test(ct)) {
-    const text = await readSseText(res);
-    return { content: [{ type: "text", text: `${line}\n\n${text}` }], isError };
+    const { text, failed } = await readSseText(res);
+    return { content: [{ type: "text", text: `${line}\n\n${text}` }], isError: isError || failed };
   }
 
   if (/application\/json/i.test(ct)) {

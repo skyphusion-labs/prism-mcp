@@ -556,3 +556,61 @@ describe("prismUrl mount boundary", () => {
     );
   });
 });
+
+describe("chat_stream failure reporting", () => {
+  async function callChatStream(id: number) {
+    const res = await worker.fetch(
+      mcpRequest(
+        {
+          jsonrpc: "2.0",
+          id,
+          method: "tools/call",
+          params: { name: "chat_stream", arguments: { model: "streaming-model", user_input: "hi" } },
+        },
+        AUTH,
+      ),
+      ENV,
+    );
+    expect(res.status).toBe(200);
+    return (await res.json()) as { result: { isError: boolean; content: { text: string }[] } };
+  }
+
+  it("an in-band error frame after text is an isError result carrying the message", async () => {
+    stubFetch(
+      'data: {"type":"delta","text":"partial "}\n\n' +
+        'data: {"type":"error","message":"provider quota exceeded"}\n\n',
+      200,
+      "text/event-stream",
+    );
+    const body = await callChatStream(30);
+    expect(body.result.isError).toBe(true);
+    expect(body.result.content[0].text).toMatch(/provider quota exceeded/);
+    expect(body.result.content[0].text).toMatch(/partial /);
+  });
+
+  it("an in-band error frame with no text is an isError result", async () => {
+    stubFetch('data: {"type":"error","message":"model unavailable"}\n\n', 200, "text/event-stream");
+    const body = await callChatStream(31);
+    expect(body.result.isError).toBe(true);
+    expect(body.result.content[0].text).toMatch(/model unavailable/);
+  });
+
+  it("a mid-stream read failure is an isError result", async () => {
+    stubFetchWithStream(throwingStream(), 200, { "content-type": "text/event-stream" });
+    const body = await callChatStream(32);
+    expect(body.result.isError).toBe(true);
+    expect(body.result.content[0].text).toMatch(/SSE read failed/);
+  });
+
+  it("a stream that completes with a done frame stays a success", async () => {
+    stubFetch(
+      'data: {"type":"delta","text":"hello"}\n\n' +
+        'data: {"type":"done","row_id":7,"conversation_id":"c1","turn_index":0}\n\n',
+      200,
+      "text/event-stream",
+    );
+    const body = await callChatStream(33);
+    expect(body.result.isError).toBe(false);
+    expect(body.result.content[0].text).toMatch(/hello/);
+  });
+});
