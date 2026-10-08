@@ -298,13 +298,12 @@ export const TOOLS: McpTool[] = [
     description: "List the session user's chat history, newest first (GET /api/history).",
     inputSchema: OBJ({
       limit: NUM("Optional page size if prism supports it (forwarded as query)."),
-      offset: NUM("Optional offset."),
     }),
     annotations: READ_ONLY,
     build: (a) => ({
       method: "GET",
       path: "/api/history",
-      query: { limit: optNum(a, "limit"), offset: optNum(a, "offset") },
+      query: { limit: optNum(a, "limit") },
     }),
   },
   {

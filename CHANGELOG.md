@@ -1,6 +1,9 @@
 ## Unreleased
 
 ### Fixed
+- Removed the `offset` parameter from `list_history` (#27). The prism host reads only `limit` and
+  its SQL has no OFFSET, so every page returned the newest rows again. A client that still sends
+  `offset` now has it ignored, same as before. Paging, if needed, comes with a host change.
 - Split the escape hatch (#12): `prism_request_read` (GET/HEAD, `READ_ONLY`) and
   `prism_request_write` (POST/PATCH/PUT/DELETE, destructive). `prism_request` is
   now a write-only alias, so a GET no longer raises a destructive prompt.

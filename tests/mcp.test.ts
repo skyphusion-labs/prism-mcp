@@ -313,6 +313,34 @@ describe("prism MCP tool dispatch", () => {
     expect(JSON.parse(String(calls[0].init.body))).toEqual({ project_id: null });
   });
 
+  it("list_history advertises and forwards limit only, never offset (#27)", async () => {
+    stubFetch([], 200);
+    const listRes = await worker.fetch(
+      mcpRequest({ jsonrpc: "2.0", id: 40, method: "tools/list" }, AUTH),
+      ENV,
+    );
+    const listed = (await listRes.json()) as {
+      result: { tools: { name: string; inputSchema: { properties: Record<string, unknown> } }[] };
+    };
+    const tool = listed.result.tools.find((t) => t.name === "list_history");
+    expect(tool).toBeDefined();
+    expect(Object.keys(tool!.inputSchema.properties)).toEqual(["limit"]);
+
+    await worker.fetch(
+      mcpRequest(
+        {
+          jsonrpc: "2.0",
+          id: 41,
+          method: "tools/call",
+          params: { name: "list_history", arguments: { limit: 5, offset: 10 } },
+        },
+        AUTH,
+      ),
+      ENV,
+    );
+    expect(calls[0].url).toBe("https://play.example.com/api/history?limit=5");
+  });
+
   it("refuses authenticated tools without PRISM_SESSION", async () => {
     const res = await worker.fetch(
       mcpRequest(
