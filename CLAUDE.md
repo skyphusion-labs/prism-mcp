@@ -8,8 +8,8 @@ Guidance for Claude Code (and the crew) working in this repo.
 Worker that proxies curated tools to a prism host (`PRISM_URL`). Implementation lives here; deploy
 config is wrangler + secrets only.
 
-**Status: v1.0.0** (root `package.json` / tags / `CHANGELOG.md`). Estate peers **prism**,
-**prism-control-plane**, **prism-ios**, **prism-android** are also at **1.0.0** (2026-08-07).
+**Status: v1.1.0** (root `package.json`). Peers are not all on that number: **prism** and
+**prism-control-plane** are 1.1.1, **prism-ios** and **prism-android** are still 1.0.0.
 
 - Tool catalog: `export const TOOLS` in `src/mcp-tools.ts` (re-count from code if the number drifts).
 - License: **MIT** (client door). Prism remains AGPL.
@@ -19,10 +19,10 @@ config is wrangler + secrets only.
 
 | Repo | Role |
 |------|------|
-| **This package** | MCP server + tool catalog (npm + Worker entry) **1.0.0** |
-| `prism` | Multimodal playground API (`/api/*`) **1.0.0** |
-| `prism-control-plane` | Metered proxy; used when the prism user has a `pcp_` key in prefs **1.0.0** |
-| `prism-ios` / `prism-android` | Native clients **1.0.0** |
+| **This package** | MCP server + tool catalog (npm + Worker entry), package 1.1.0 |
+| `prism` | Multimodal playground API (`/api/*`), package 1.1.1 |
+| `prism-control-plane` | Metered proxy; used when the prism user has a `pcp_` key in prefs, package 1.1.1 |
+| `prism-ios` / `prism-android` | Native clients, marketing version 1.0.0 |
 
 MCP talks to **prism**, not directly to the control plane. Control-plane spend is whatever the
 seeded prism session has configured under Account prefs.
